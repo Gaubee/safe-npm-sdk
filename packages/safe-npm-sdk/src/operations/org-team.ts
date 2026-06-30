@@ -4,6 +4,8 @@ import { VoidSchema } from "../schemas/common";
 import {
   type ChangeOrgMembershipInput,
   ChangeOrgMembershipInputSchema,
+  type CreateTeamResponse,
+  CreateTeamResponseSchema,
   type CreateTeamInput,
   CreateTeamInputSchema,
   type OrgInvite,
@@ -111,14 +113,14 @@ export async function createTeam(
   org: string,
   input: CreateTeamInput,
   client?: NpmClient | null,
-): Promise<Result<unknown>> {
+): Promise<Result<CreateTeamResponse>> {
   const c = resolveClient(client);
   const body = CreateTeamInputSchema.parse(input);
   return c.request({
     method: "PUT",
     path: `/-/org/${encodeURIComponent(org)}/team`,
     body,
-    schema: VoidSchema,
+    schema: CreateTeamResponseSchema,
   });
 }
 

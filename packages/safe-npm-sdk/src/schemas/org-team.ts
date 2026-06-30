@@ -28,6 +28,10 @@ export type OrgTeams = z.infer<typeof OrgTeamsSchema>;
 export const TeamUsersSchema = z.array(z.string());
 export type TeamUsers = z.infer<typeof TeamUsersSchema>;
 
+/** Response from creating a team (the created team's name). */
+export const CreateTeamResponseSchema = z.object({ name: z.string() }).passthrough();
+export type CreateTeamResponse = z.infer<typeof CreateTeamResponseSchema>;
+
 /** Input for creating a team. */
 export const CreateTeamInputSchema = z.object({
   name: z.string(),

@@ -62,16 +62,17 @@ describe("org operations", () => {
 });
 
 describe("team operations", () => {
-  it("createTeam", async () => {
+  it("createTeam returns the created team name", async () => {
     server.use(
       reg.put("/-/org/myorg/team", async ({ request }) => {
         const body = (await request.json()) as Record<string, unknown>;
         expect(body).toEqual({ name: "devs", description: "dev team" });
-        return new HttpResponse(null, { status: 201 });
+        return HttpResponse.json({ name: "devs" }, { status: 201 });
       }),
     );
     const r = await createTeam("myorg", { name: "devs", description: "dev team" }, makeClient());
     expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.name).toBe("devs");
   });
 
   it("deleteTeam", async () => {
