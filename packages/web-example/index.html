@@ -246,7 +246,7 @@
           let r;
           switch (op) {
             case "searchPackages":
-              r = await searchPackages({ text: pv("text"), size: 10 });
+              r = await searchPackages({ text: pv("text"), size: 10 }, client);
               break;
             case "listTokens":
               r = await listTokens(client);
