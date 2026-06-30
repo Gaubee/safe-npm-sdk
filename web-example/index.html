@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>npm Registry SDK — safe GET example</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 880px;
+        padding: 24px 20px 80px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin-bottom: 0.25em;
+      }
+      .muted {
+        color: #888;
+        font-size: 0.9rem;
+        margin-top: 0;
+      }
+      fieldset {
+        border: 1px solid #444;
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin: 18px 0;
+      }
+      legend {
+        font-weight: 600;
+        padding: 0 6px;
+      }
+      label {
+        display: block;
+        margin: 8px 0 2px;
+        font-size: 0.85rem;
+      }
+      input,
+      select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #666;
+        background: inherit;
+        color: inherit;
+        font: inherit;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+      }
+      .row > * {
+        flex: 1;
+      }
+      button {
+        margin-top: 14px;
+        padding: 10px 18px;
+        border: none;
+        border-radius: 8px;
+        background: #cb3837;
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      pre {
+        background: rgba(127, 127, 127, 0.15);
+        padding: 14px;
+        border-radius: 8px;
+        overflow: auto;
+        font-size: 0.82rem;
+        max-height: 420px;
+      }
+      .ok {
+        color: #1d8127;
+      }
+      .err {
+        color: #d41f1c;
+      }
+      .hint {
+        font-size: 0.78rem;
+        color: #888;
+      }
+      details {
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>npm Registry SDK — safe GET playground</h1>
+    <p class="muted">
+      Runs entirely in your browser. Your token only leaves your machine to call
+      <code>registry.npmjs.org</code> directly. Only read-only (GET) endpoints are exposed —
+      nothing here can publish, create, or delete.
+    </p>
+
+    <fieldset>
+      <legend>Credentials</legend>
+      <div class="row">
+        <div>
+          <label for="token">Access token (read-only recommended)</label>
+          <input id="token" type="password" placeholder="npm_xxx" autocomplete="off" />
+        </div>
+        <div>
+          <label for="otp">OTP (only if a GET requires 2FA)</label>
+          <input id="otp" type="text" inputmode="numeric" placeholder="123456" autocomplete="off" />
+        </div>
+      </div>
+      <p class="hint">
+        Create a granular read-only token at
+        <a href="https://www.npmjs.com/settings/~/tokens" target="_blank" rel="noopener">
+          npmjs.com → Access Tokens</a
+        >. This page stores it nowhere.
+      </p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Read-only operation</legend>
+      <label for="op">Choose a GET endpoint</label>
+      <select id="op">
+        <option value="searchPackages">searchPackages — public, no token needed</option>
+        <option value="listTokens">listTokens — your tokens</option>
+        <option value="getPackageVisibility">getPackageVisibility — a package's visibility</option>
+        <option value="getPackageCollaborators">getPackageCollaborators — a package's users</option>
+        <option value="getOrgMembership">getOrgMembership — members of an org</option>
+        <option value="getScopeTeams">getScopeTeams — teams in an org</option>
+        <option value="getTeamMembership">getTeamMembership — users in a team</option>
+        <option value="getStageItems">getStageItems — your staged versions</option>
+      </select>
+      <div id="params" class="row" style="margin-top: 10px"></div>
+      <button id="run">Run GET</button>
+    </fieldset>
+
+    <details open>
+      <summary>Result</summary>
+      <pre id="out">— pick an operation and press “Run GET” —</pre>
+    </details>
+
+    <!--
+      Loads the SDK via an import map. We point at the locally-built bundle so
+      this example works offline after `pnpm build`. To ship it elsewhere, host
+      dist/ on a static server or CDN and adjust the map target.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@api-npm/sdk": "../dist/index.mjs",
+          "zod": "https://esm.sh/zod@3.25.76"
+        }
+      }
+    </script>
+    <script type="module">
+      import {
+        createClient,
+        searchPackages,
+        listTokens,
+        getPackageVisibility,
+        getPackageCollaborators,
+        getOrgMembership,
+        getScopeTeams,
+        getTeamMembership,
+        getStageItems,
+      } from "@api-npm/sdk";
+
+      const opSelect = document.getElementById("op");
+      const paramsBox = document.getElementById("params");
+      const out = document.getElementById("out");
+      const runBtn = document.getElementById("run");
+
+      // Per-operation parameter fields.
+      const PARAMS = {
+        searchPackages: [{ id: "text", label: "Search text", value: "typescript" }],
+        listTokens: [],
+        getPackageVisibility: [{ id: "pkg", label: "Package name", value: "@scope/pkg" }],
+        getPackageCollaborators: [{ id: "pkg", label: "Package name", value: "@scope/pkg" }],
+        getOrgMembership: [{ id: "org", label: "Org / scope name", value: "myorg" }],
+        getScopeTeams: [{ id: "org", label: "Org / scope name", value: "myorg" }],
+        getTeamMembership: [
+          { id: "org", label: "Org / scope name", value: "myorg" },
+          { id: "team", label: "Team name", value: "devs" },
+        ],
+        getStageItems: [],
+      };
+
+      function renderParams() {
+        const op = opSelect.value;
+        const fields = PARAMS[op] || [];
+        paramsBox.innerHTML = "";
+        for (const f of fields) {
+          const wrap = document.createElement("div");
+          wrap.innerHTML = `<label for="p-${f.id}">${f.label}</label>
+            <input id="p-${f.id}" value="${f.value}" />`;
+          paramsBox.appendChild(wrap);
+        }
+      }
+      function pv(id) {
+        const el = document.getElementById("p-" + id);
+        return el ? el.value.trim() : "";
+      }
+      function render(result) {
+        if (result.ok) {
+          out.className = "ok";
+          out.textContent = "✅ success (HTTP " + result.response.status + ")\n\n" + JSON.stringify(result.data, null, 2);
+        } else {
+          out.className = "err";
+          const notice = result.error.headers.get("npm-notice");
+          out.textContent =
+            "❌ " + result.error.status + " " + result.error.message +
+            (notice ? "\n\nnpm-notice: " + notice : "") +
+            "\n\n" + JSON.stringify(result.error.body, null, 2);
+        }
+      }
+
+      opSelect.addEventListener("change", renderParams);
+      renderParams();
+
+      runBtn.addEventListener("click", async () => {
+        runBtn.disabled = true;
+        out.className = "";
+        out.textContent = "…";
+        const token = document.getElementById("token").value.trim();
+        const otp = document.getElementById("otp").value.trim();
+        const op = opSelect.value;
+
+        // searchPackages is public; everything else needs a token.
+        const client =
+          op === "searchPackages"
+            ? createClient({ auth: { token: token || "anonymous" }, retries: 0 })
+            : createClient({ auth: { token }, retries: 0 });
+
+        try {
+          let r;
+          switch (op) {
+            case "searchPackages":
+              r = await searchPackages({ text: pv("text"), size: 10 });
+              break;
+            case "listTokens":
+              r = await listTokens(client);
+              break;
+            case "getPackageVisibility":
+              r = await getPackageVisibility(pv("pkg"), client);
+              break;
+            case "getPackageCollaborators":
+              r = await getPackageCollaborators(pv("pkg"), client);
+              break;
+            case "getOrgMembership":
+              r = await getOrgMembership(pv("org"), client);
+              break;
+            case "getScopeTeams":
+              r = await getScopeTeams(pv("org"), client);
+              break;
+            case "getTeamMembership":
+              r = await getTeamMembership({ org: pv("org"), team: pv("team") }, client);
+              break;
+            case "getStageItems":
+              r = await getStageItems({}, client);
+              break;
+            default:
+              throw new Error("unknown op");
+          }
+          // Note: a few of these GETs may demand OTP under 2FA; surface it.
+          if (!r.ok && otp && r.error.status === 401) {
+            out.className = "err";
+            out.textContent =
+              "401 — this GET requires an OTP under 2FA. That path isn't exposed here for safety.\n\n" +
+              JSON.stringify(r.error.body, null, 2);
+          } else {
+            render(r);
+          }
+        } catch (e) {
+          out.className = "err";
+          out.textContent = "⚠️ " + (e?.message || String(e));
+        } finally {
+          runBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

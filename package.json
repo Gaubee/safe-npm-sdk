@@ -1,13 +1,56 @@
 {
-  "name": "api-npm-sdk",
-  "version": "0.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
+  "name": "@api-npm/sdk",
+  "version": "0.1.0",
+  "description": "Modern TypeScript SDK for the npm registry API — ESM + fetch + zod",
+  "type": "module",
+  "license": "MIT",
   "author": "",
-  "license": "ISC",
+  "keywords": [
+    "npm",
+    "registry",
+    "api",
+    "sdk",
+    "typescript",
+    "zod",
+    "publish",
+    "oidc"
+  ],
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src test",
+    "format": "biome format --write src test",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run typecheck && pnpm run build"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.0",
+    "msw": "^2.7.0",
+    "tsdown": "^0.22.3",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "packageManager": "pnpm@10.22.0"
 }
