@@ -77,7 +77,16 @@ export function createClient(options: ClientOptions): NpmClient {
 // ---------------------------------------------------------------------------
 
 function buildUrl(registry: string, path: string, query?: RequestOptions["query"]): URL {
-  const url = new URL(`${registry}${path}`);
+  // Resolve the registry against a base URL. Absolute registries
+  // (e.g. "https://registry.npmjs.org") parse standalone; relative ones
+  // (e.g. "/api" for a same-origin proxy in the browser) need a base. In a
+  // browser we use document.baseURI; elsewhere (Node/Deno/Bun) a relative
+  // registry has no meaningful base and is treated as an absolute URL.
+  // `globalThis.document` keeps the SDK free of a DOM lib dependency while
+  // still detecting the browser at runtime.
+  const doc = (globalThis as { document?: { baseURI?: string } }).document;
+  const base = doc?.baseURI;
+  const url = base ? new URL(`${registry}${path}`, base) : new URL(`${registry}${path}`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined) continue;

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
+import { http } from "msw";
 import { createClient, getDefaultClient, resolveClient, setDefaultClient } from "../src/client";
 import { escapePackageName } from "../src/encode";
 import { HttpResponse, TOKEN, makeClient, reg, startServer } from "./helpers";
@@ -40,6 +41,39 @@ describe("request engine: url & query", () => {
       query: { text: "x", from: undefined },
       schema: z.object({ objects: z.array(z.unknown()) }),
     });
+  });
+
+  it("resolves a relative registry against document.baseURI (browser)", async () => {
+    // Simulate a browser with a same-origin proxy at /api.
+    const original = (globalThis as { document?: unknown }).document;
+    (globalThis as { document?: { baseURI: string } }).document = {
+      baseURI: "http://localhost:5173/app/",
+    };
+    try {
+      let hit: string | null = null;
+      server.use(
+        http.get("http://localhost:5173/api/-/v1/search", ({ request }) => {
+          hit = new URL(request.url).pathname;
+          return HttpResponse.json({ objects: [] });
+        }),
+      );
+      const c = makeClient({ registry: "/api" });
+      const r = await c.request({
+        method: "GET",
+        path: "/-/v1/search",
+        query: { text: "zod" },
+        schema: z.object({ objects: z.array(z.unknown()) }),
+      });
+      expect(r.ok).toBe(true);
+      // Absolute "/-/v1/search" path ignores the base's "/app/" subpath.
+      expect(hit).toBe("/api/-/v1/search");
+    } finally {
+      if (original === undefined) {
+        delete (globalThis as { document?: unknown }).document;
+      } else {
+        (globalThis as { document: unknown }).document = original;
+      }
+    }
   });
 });
 
