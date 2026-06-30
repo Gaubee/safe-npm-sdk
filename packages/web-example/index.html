@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf8" />
@@ -7,7 +7,12 @@
     <style>
       :root {
         color-scheme: light dark;
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
       }
       body {
         margin: 0 auto;
@@ -99,8 +104,8 @@
     <h1>npm Registry SDK — safe GET playground</h1>
     <p class="muted">
       Runs entirely in your browser. Your token only leaves your machine to call
-      <code>registry.npmjs.org</code> directly. Only read-only (GET) endpoints are exposed —
-      nothing here can publish, create, or delete.
+      <code>registry.npmjs.org</code> directly. Only read-only (GET) endpoints are exposed — nothing
+      here can publish, create, or delete.
     </p>
 
     <fieldset>
@@ -146,18 +151,10 @@
     </details>
 
     <!--
-      Loads the SDK via an import map. We point at the locally-built bundle so
-      this example works offline after `pnpm build`. To ship it elsewhere, host
-      dist/ on a static server or CDN and adjust the map target.
+      Loads the SDK from the `safe-npm-sdk` workspace package. Under `vp dev`,
+      Vite resolves it straight to the SDK source (hot-reload, no build needed);
+      under `vp build` the published bundle is used.
     -->
-    <script type="importmap">
-      {
-        "imports": {
-          "@api-npm/sdk": "../dist/index.mjs",
-          "zod": "https://esm.sh/zod@3.25.76"
-        }
-      }
-    </script>
     <script type="module">
       import {
         createClient,
@@ -169,7 +166,7 @@
         getScopeTeams,
         getTeamMembership,
         getStageItems,
-      } from "@api-npm/sdk";
+      } from "safe-npm-sdk";
 
       const opSelect = document.getElementById("op");
       const paramsBox = document.getElementById("params");
@@ -209,14 +206,22 @@
       function render(result) {
         if (result.ok) {
           out.className = "ok";
-          out.textContent = "✅ success (HTTP " + result.response.status + ")\n\n" + JSON.stringify(result.data, null, 2);
+          out.textContent =
+            "✅ success (HTTP " +
+            result.response.status +
+            ")\n\n" +
+            JSON.stringify(result.data, null, 2);
         } else {
           out.className = "err";
           const notice = result.error.headers.get("npm-notice");
           out.textContent =
-            "❌ " + result.error.status + " " + result.error.message +
+            "❌ " +
+            result.error.status +
+            " " +
+            result.error.message +
             (notice ? "\n\nnpm-notice: " + notice : "") +
-            "\n\n" + JSON.stringify(result.error.body, null, 2);
+            "\n\n" +
+            JSON.stringify(result.error.body, null, 2);
         }
       }
 

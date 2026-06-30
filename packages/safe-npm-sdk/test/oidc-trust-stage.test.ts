@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createClient } from "../src/client";
 import { exchangeOidcToken } from "../src/operations/oidc";
 import {

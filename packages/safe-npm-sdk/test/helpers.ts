@@ -1,26 +1,24 @@
 import { http, HttpResponse } from "msw";
-import { type SetupServerApi, setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { type NpmClient, createClient } from "../src/client";
+import { type SetupServer, setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll } from "vite-plus/test";
+import { type ClientOptions, type NpmClient, createClient } from "../src/client";
 
 export const REGISTRY = "https://registry.npmjs.org";
 export const TOKEN = "npm_test_token_xxx";
 
 /** Create a client pointed at the (mocked) registry. */
-export function makeClient(
-  overrides: Partial<ConstructorParameters<typeof createClient>[0]> = {},
-): NpmClient {
-  return createClient({
+export function makeClient(overrides: Partial<ClientOptions> = {}): NpmClient {
+  const base: ClientOptions = {
     auth: { token: TOKEN },
     registry: REGISTRY,
     retries: 0,
     timeout: 2000,
-    ...overrides,
-  });
+  };
+  return createClient({ ...base, ...overrides });
 }
 
 /** Start an MSW server intercepting all registry requests. */
-export function startServer(): SetupServerApi {
+export function startServer(): SetupServer {
   const server = setupServer();
   beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
   afterEach(() => server.resetHandlers());

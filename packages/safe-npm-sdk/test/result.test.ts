@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { NpmApiError } from "../src/error";
 import { err, ok } from "../src/result";
 
@@ -69,7 +69,7 @@ describe("err()", () => {
 
   it("map passes errors through unchanged", () => {
     const r = makeErr(500);
-    const mapped = r.map((n: number) => n * 3);
+    const mapped = r.map((data) => data);
     expect(mapped.ok).toBe(false);
   });
 

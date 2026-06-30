@@ -10,7 +10,11 @@ import type { NpmApiError } from "./error";
 export interface ApiResponse<T> {
   readonly status: number;
   readonly headers: Headers;
-  readonly body: T | unknown;
+  /**
+   * The response body. Carries the parsed data on success; on error it may be
+   * the unparsed/failed body. Typed as `T` for convenience (branch on `.ok`).
+   */
+  readonly body: T;
 }
 
 /**
@@ -53,7 +57,7 @@ export function ok<T>(data: T, response: ApiResponse<T>): OkResult<T> {
     unwrapOr: <U>(_fallback: U): T | U => data,
     map: <U>(fn: (data: T) => U): Result<U> => {
       const mapped = fn(data);
-      return ok(mapped, response as ApiResponse<U>) as Result<U>;
+      return ok(mapped, response as unknown as ApiResponse<U>) as Result<U>;
     },
   };
 }
@@ -68,6 +72,7 @@ export function err<T>(error: NpmApiError, response: ApiResponse<T>): ErrResult<
       throw error;
     },
     unwrapOr: <U>(fallback: U): U => fallback,
-    map: <U>(_fn: (data: T) => U): Result<U> => err(error, response as ApiResponse<U>) as Result<U>,
+    map: <U>(_fn: (data: T) => U): Result<U> =>
+      err(error, response as unknown as ApiResponse<U>) as Result<U>,
   };
 }

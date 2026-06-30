@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { bulkAudit } from "../src/operations/audit";
 import { publish } from "../src/operations/publish";
 import { searchPackages } from "../src/operations/search";

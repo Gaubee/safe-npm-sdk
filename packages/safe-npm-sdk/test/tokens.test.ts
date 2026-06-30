@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createToken, deleteToken, listTokens } from "../src/operations/tokens";
 import { HttpResponse, TOKEN, makeClient, reg, startServer } from "./helpers";
 
