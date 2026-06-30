@@ -14,5 +14,25 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    proxy: {
+      // Same-origin proxy to the npm registry. The browser can't call
+      // registry.npmjs.org directly (no CORS), so requests go to /api/... on
+      // this dev server and are forwarded server-side.
+      "/api": {
+        target: "https://registry.npmjs.org",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ""),
+        // headers are forwarded by default (Authorization, npm-otp, ...)
+        configure: (proxy) => {
+          // Defense in depth: this example only exposes GET endpoints. Reject
+          // any write method so a frontend bug can never publish/delete.
+          proxy.on("proxyReq", (proxyReq, req) => {
+            if (req.method !== "GET") {
+              proxyReq.destroy();
+            }
+          });
+        },
+      },
+    },
   },
 });

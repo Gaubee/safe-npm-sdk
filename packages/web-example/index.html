@@ -103,9 +103,10 @@
   <body>
     <h1>npm Registry SDK — safe GET playground</h1>
     <p class="muted">
-      Runs entirely in your browser. Your token only leaves your machine to call
-      <code>registry.npmjs.org</code> directly. Only read-only (GET) endpoints are exposed — nothing
-      here can publish, create, or delete.
+      Browsers can't reach <code>registry.npmjs.org</code> directly (no CORS), so this dev server
+      proxies requests via <code>/api</code> → the npm registry, forwarding your token server-side.
+      Only read-only (GET) endpoints are exposed — the proxy rejects every non-GET request, so
+      nothing here can publish, create, or delete.
     </p>
 
     <fieldset>
@@ -236,11 +237,14 @@
         const otp = document.getElementById("otp").value.trim();
         const op = opSelect.value;
 
+        // Point at the same-origin /api proxy (the dev server forwards to
+        // registry.npmjs.org). Browsers can't hit the registry directly (CORS).
+        const base = { registry: "/api", retries: 0 };
         // searchPackages is public; everything else needs a token.
         const client =
           op === "searchPackages"
-            ? createClient({ auth: { token: token || "anonymous" }, retries: 0 })
-            : createClient({ auth: { token }, retries: 0 });
+            ? createClient({ auth: { token: token || "anonymous" }, ...base })
+            : createClient({ auth: { token }, ...base });
 
         try {
           let r;
