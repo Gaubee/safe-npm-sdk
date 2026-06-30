@@ -121,6 +121,59 @@ function extractMessage(body: unknown, fallback: string): string {
   return fallback;
 }
 
+// Keys whose values must never appear in logs (credentials / secrets).
+// Substrings that mark a key as sensitive, matched case-insensitively and
+// treating `-`/`_` as equivalent (e.g. npm-otp, npm_otp, access_token).
+const SENSITIVE_KEY_PARTS = ["authorization", "password", "token", "otp", "secret", "apikey"];
+
+function isSensitiveKey(key: string): boolean {
+  const norm = key.toLowerCase().replace(/[_-]/g, "");
+  return SENSITIVE_KEY_PARTS.some((part) => norm.includes(part.replace(/[_-]/g, "")));
+}
+
+/** Replace a value with "***" if its key is sensitive. */
+function redactValue(key: string, value: unknown): unknown {
+  if (isSensitiveKey(key)) return "***";
+  // Large base64 attachment blobs (publish) are noise + potentially sensitive.
+  if (typeof value === "string" && value.length > 200 && /^[A-Za-z0-9+/=]+$/.test(value)) {
+    return `<${value.length} chars>`;
+  }
+  return value;
+}
+
+/** Recursively redact sensitive keys within an object, for logging only. */
+function redactForLog(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((v) => redactForLog(v));
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = redactValue(k, redactForLog(v));
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Build a compact, redacted description of a request for error messages.
+ * Shows method + URL (with redacted query) + redacted body, so failures are
+ * debuggable without leaking tokens, passwords, or OTPs.
+ */
+function describeRequest(method: string, url: URL, body: unknown): string {
+  const q: Record<string, string> = {};
+  for (const [k, v] of url.searchParams.entries()) q[k] = String(redactValue(k, v));
+  const qs = Object.keys(q).length ? `?${new URLSearchParams(q).toString()}` : "";
+  const parts = [`${method} ${url.origin}${url.pathname}${qs}`];
+  if (body !== undefined) {
+    try {
+      parts.push(`body=${JSON.stringify(redactForLog(body))}`);
+    } catch {
+      parts.push("body=<unserializable>");
+    }
+  }
+  return parts.join(" ");
+}
+
 async function doRequest(
   client: NpmClient,
   fetchImpl: typeof fetch,
@@ -164,7 +217,7 @@ async function doRequest(
       }
       const error = new NpmApiError({
         status: 0,
-        message: e instanceof Error ? `network error: ${e.message}` : "network error",
+        message: `network error: ${e instanceof Error ? e.message : "unknown"} [${describeRequest(opts.method, url, opts.body)}]`,
         body: undefined,
         headers: new Headers(),
         request: reqMeta,
@@ -188,7 +241,7 @@ async function doRequest(
       }
       const error = new NpmApiError({
         status: res.status,
-        message: extractMessage(body, `request failed with status ${res.status}`),
+        message: `${extractMessage(body, `request failed with status ${res.status}`)} [${describeRequest(opts.method, url, opts.body)}]`,
         body,
         headers: res.headers,
         request: reqMeta,
@@ -199,9 +252,12 @@ async function doRequest(
     // Success: validate with zod schema.
     const parsed = opts.schema.safeParse(body);
     if (!parsed.success) {
+      const issues = parsed.error.issues
+        .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+        .join("; ");
       const error = new NpmApiError({
         status: res.status,
-        message: `response schema validation failed: ${parsed.error.message}`,
+        message: `response schema validation failed: ${issues} [${describeRequest(opts.method, url, opts.body)}]`,
         body,
         headers: res.headers,
         request: reqMeta,

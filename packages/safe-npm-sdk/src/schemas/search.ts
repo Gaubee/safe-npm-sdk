@@ -23,12 +23,12 @@ export const SearchResultPackageSchema = z
   .object({
     name: z.string(),
     version: z.string().optional(),
-    description: z.string().nullable().optional(),
+    description: z.string().nullish(),
     keywords: z.array(z.string()).optional(),
-    license: z.string().nullable().optional(),
+    license: z.string().nullish(),
     date: z.string().optional(),
     sanitized_name: z.string().optional(),
-    publisher: PersonSchema.nullable().optional(),
+    publisher: PersonSchema.nullish(),
     maintainers: z.array(PersonSchema).optional(),
     links: PackageLinksSchema.optional(),
   })

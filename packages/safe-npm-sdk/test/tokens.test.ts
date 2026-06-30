@@ -32,6 +32,35 @@ describe("tokens operations", () => {
     }
   });
 
+  it("listTokens tolerates null fields the live registry sends", async () => {
+    // The registry returns null for some token fields (e.g. scopes[].name,
+    // description) instead of omitting them; nullish() must accept these.
+    server.use(
+      reg.get("/-/npm/v1/tokens", () =>
+        HttpResponse.json({
+          objects: [
+            {
+              key: "k1",
+              name: "ci",
+              description: null,
+              scopes: [{ type: "package", name: null }],
+              permissions: [{ name: null, action: null }],
+            },
+          ],
+          total: "1",
+        }),
+      ),
+    );
+    const r = await listTokens(makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.objects[0]?.description).toBeNull();
+      expect(r.data.objects[0]?.scopes?.[0]?.name).toBeNull();
+      // total also arrives as a numeric string and is coerced
+      expect(r.data.total).toBe(1);
+    }
+  });
+
   it("createToken sends otp + body and returns the created token", async () => {
     server.use(
       reg.post("/-/npm/v1/tokens", async ({ request }) => {

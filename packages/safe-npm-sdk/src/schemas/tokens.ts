@@ -2,32 +2,32 @@ import { z } from "zod";
 
 /** A token permission entry. */
 export const TokenPermissionSchema = z.object({
-  name: z.string(),
-  action: z.string(),
+  name: z.string().nullish(),
+  action: z.string().nullish(),
 });
 export type TokenPermission = z.infer<typeof TokenPermissionSchema>;
 
 /** A token scope entry. */
 export const TokenScopeSchema = z.object({
-  type: z.string(),
-  name: z.string(),
+  type: z.string().nullish(),
+  name: z.string().nullish(),
 });
 export type TokenScope = z.infer<typeof TokenScopeSchema>;
 
 /** A single token object (as returned by list/get). */
 export const TokenSchema = z.object({
-  key: z.string(),
-  name: z.string(),
-  description: z.string().nullable().optional(),
-  token: z.string().optional(),
-  expiry: z.string().optional(),
-  readonly: z.boolean().optional(),
-  bypass_2fa: z.boolean().optional(),
-  cidr: z.array(z.string()).nullable().optional(),
-  revoked: z.string().nullable().optional(),
-  created: z.string().optional(),
-  updated: z.string().nullable().optional(),
-  accessed: z.string().nullable().optional(),
+  key: z.string().nullish(),
+  name: z.string().nullish(),
+  description: z.string().nullish(),
+  token: z.string().nullish(),
+  expiry: z.string().nullish(),
+  readonly: z.boolean().nullish(),
+  bypass_2fa: z.boolean().nullish(),
+  cidr: z.array(z.string()).nullish(),
+  revoked: z.string().nullish(),
+  created: z.string().nullish(),
+  updated: z.string().nullish(),
+  accessed: z.string().nullish(),
   permissions: z.array(TokenPermissionSchema).optional(),
   scopes: z.array(TokenScopeSchema).optional(),
 });

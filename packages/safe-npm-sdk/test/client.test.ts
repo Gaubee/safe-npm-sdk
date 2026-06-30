@@ -155,7 +155,7 @@ describe("request engine: notice & errors", () => {
     expect(notices).toEqual(["token limit reached"]);
   });
 
-  it("returns an error result on 4xx", async () => {
+  it("returns an error result on 4xx with a redacted request description", async () => {
     server.use(
       reg.get("/-/npm/v1/tokens", () =>
         HttpResponse.json({ message: "Unauthorized" }, { status: 401 }),
@@ -166,7 +166,12 @@ describe("request engine: notice & errors", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.status).toBe(401);
-      expect(r.error.message).toBe("Unauthorized");
+      // message starts with the body message, then appends the request line.
+      expect(r.error.message.startsWith("Unauthorized")).toBe(true);
+      expect(r.error.message).toContain("GET ");
+      expect(r.error.message).toContain("/-/npm/v1/tokens");
+      // no token leak in the message
+      expect(r.error.message.includes(TOKEN)).toBe(false);
       // response still exposed
       expect(r.response.status).toBe(401);
     }
@@ -182,6 +187,32 @@ describe("request engine: notice & errors", () => {
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.status).toBe(200);
+  });
+
+  it("redacts sensitive query/body fields in the error message", async () => {
+    server.use(
+      reg.post("/-/npm/v1/tokens", () => HttpResponse.json({ message: "bad" }, { status: 400 })),
+    );
+    const c = makeClient();
+    const r = await c.request({
+      method: "POST",
+      path: "/-/npm/v1/tokens",
+      query: { npm_otp: "123456", text: "ok" },
+      body: { password: "s3cret", name: "mytoken", token: "leak_me" },
+      schema: z.unknown(),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const msg = r.error.message;
+      // sensitive values must never appear
+      expect(msg.includes("s3cret")).toBe(false);
+      expect(msg.includes("leak_me")).toBe(false);
+      expect(msg.includes("123456")).toBe(false);
+      // sensitive keys are masked, harmless ones are visible
+      expect(msg.includes('"password":"***"')).toBe(true);
+      expect(msg.includes('"token":"***"')).toBe(true);
+      expect(msg.includes("mytoken")).toBe(true);
+    }
   });
 });
 
