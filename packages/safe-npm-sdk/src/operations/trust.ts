@@ -51,11 +51,12 @@ export async function configureTrustedPublisher(
   client?: NpmClient | null,
 ): Promise<Result<TrustedPublisherConfigs>> {
   const c = resolveClient(client);
-  const body = TrustedPublisherConfigCreateSchema.parse(config);
+  const parsed = TrustedPublisherConfigCreateSchema.parse(config);
+  // The registry expects an ARRAY of configs, even for a single entry.
   return c.request({
     method: "POST",
     path: `/-/package/${escapePackageName(pkg)}/trust`,
-    body,
+    body: [parsed],
     schema: TrustedPublisherConfigsSchema,
     otp: opts.otp,
     extraHeaders: {

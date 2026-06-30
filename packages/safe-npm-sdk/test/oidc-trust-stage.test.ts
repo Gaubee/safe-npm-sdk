@@ -55,12 +55,15 @@ describe("trust", () => {
     if (r.ok) expect(r.data).toHaveLength(1);
   });
 
-  it("configureTrustedPublisher posts a config", async () => {
+  it("configureTrustedPublisher posts a config wrapped in an array", async () => {
     server.use(
       reg.post("/-/package/@scope%2Fpkg/trust", async ({ request }) => {
         expect(request.headers.get("npm-otp")).toBe("333333");
-        const body = (await request.json()) as Record<string, unknown>;
-        expect(body.type).toBe("github");
+        const body = (await request.json()) as unknown[];
+        // The registry expects an array of configs, even for a single entry.
+        expect(Array.isArray(body)).toBe(true);
+        expect(body).toHaveLength(1);
+        expect((body[0] as Record<string, unknown>).type).toBe("github");
         return HttpResponse.json([{ id: "12345678-1234-1234-1234-123456789abc", ...githubCfg }]);
       }),
     );
