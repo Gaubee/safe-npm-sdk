@@ -120,12 +120,16 @@
           <label for="otp">OTP (only if a GET requires 2FA)</label>
           <input id="otp" type="text" inputmode="numeric" placeholder="123456" autocomplete="off" />
         </div>
+        <div style="flex: 0 0 auto; align-self: flex-end">
+          <button id="clear" type="button" style="margin-top: 0">Clear</button>
+        </div>
       </div>
       <p class="hint">
         Create a granular read-only token at
         <a href="https://www.npmjs.com/settings/~/tokens" target="_blank" rel="noopener">
           npmjs.com → Access Tokens</a
-        >. This page stores it nowhere.
+        >. The token and your last operation are saved in this browser's localStorage for
+        convenience; OTP is never saved. Use <b>Clear</b> to wipe both the form and the storage.
       </p>
     </fieldset>
 
@@ -173,8 +177,39 @@
       const paramsBox = document.getElementById("params");
       const out = document.getElementById("out");
       const runBtn = document.getElementById("run");
+      const tokenInput = document.getElementById("token");
+      const otpInput = document.getElementById("otp");
+      const clearBtn = document.getElementById("clear");
 
-      // Per-operation parameter fields.
+      // ----- Persistence (localStorage). OTP is intentionally never stored. -----
+      const STORAGE_KEY = "safe-npm-sdk:example";
+      const state = loadState();
+      function loadState() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "") || {};
+        } catch {
+          return {};
+        }
+      }
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch {
+          /* storage may be unavailable (private mode); ignore */
+        }
+      }
+      // token
+      if (typeof state.token === "string") tokenInput.value = state.token;
+      tokenInput.addEventListener("input", () => {
+        state.token = tokenInput.value;
+        saveState();
+      });
+      // last-selected operation
+      if (typeof state.op === "string" && opSelect.querySelector(`option[value="${state.op}"]`)) {
+        opSelect.value = state.op;
+      }
+
+      // Per-operation parameter fields (default values).
       const PARAMS = {
         searchPackages: [{ id: "text", label: "Search text", value: "typescript" }],
         listTokens: [],
@@ -192,11 +227,18 @@
       function renderParams() {
         const op = opSelect.value;
         const fields = PARAMS[op] || [];
+        // capture current param values before re-rendering
+        const prev = {};
+        for (const f of fields) prev[f.id] = pv(f.id);
+        state.params = state.params || {};
         paramsBox.innerHTML = "";
         for (const f of fields) {
+          // restore order: saved value > value just typed > default
+          const saved = state.params[op]?.[f.id];
+          const value = saved ?? prev[f.id] ?? f.value;
           const wrap = document.createElement("div");
           wrap.innerHTML = `<label for="p-${f.id}">${f.label}</label>
-            <input id="p-${f.id}" value="${f.value}" />`;
+            <input id="p-${f.id}" value="${escapeAttr(value)}" />`;
           paramsBox.appendChild(wrap);
         }
       }
@@ -204,6 +246,21 @@
         const el = document.getElementById("p-" + id);
         return el ? el.value.trim() : "";
       }
+      function escapeAttr(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      }
+      // persist param values as they're typed (per operation)
+      paramsBox.addEventListener("input", (e) => {
+        const t = e.target;
+        if (t?.tagName !== "INPUT" || !t.id.startsWith("p-")) return;
+        const id = t.id.slice(2);
+        const op = opSelect.value;
+        state.params = state.params || {};
+        state.params[op] = state.params[op] || {};
+        state.params[op][id] = t.value;
+        saveState();
+      });
+
       function render(result) {
         if (result.ok) {
           out.className = "ok";
@@ -226,15 +283,37 @@
         }
       }
 
-      opSelect.addEventListener("change", renderParams);
+      // remember the selected operation and re-render its params
+      opSelect.addEventListener("change", () => {
+        state.op = opSelect.value;
+        saveState();
+        renderParams();
+      });
       renderParams();
+
+      // Clear everything: form fields + localStorage (OTP included in the form reset).
+      clearBtn.addEventListener("click", () => {
+        tokenInput.value = "";
+        otpInput.value = "";
+        for (const el of paramsBox.querySelectorAll("input")) el.value = "";
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        for (const k of Object.keys(state)) delete state[k];
+        opSelect.value = opSelect.querySelector("option").value;
+        renderParams();
+        out.className = "muted";
+        out.textContent = "— cleared —";
+      });
 
       runBtn.addEventListener("click", async () => {
         runBtn.disabled = true;
         out.className = "";
         out.textContent = "…";
-        const token = document.getElementById("token").value.trim();
-        const otp = document.getElementById("otp").value.trim();
+        const token = tokenInput.value.trim();
+        const otp = otpInput.value.trim();
         const op = opSelect.value;
 
         // Point at the same-origin /api proxy (the dev server forwards to
