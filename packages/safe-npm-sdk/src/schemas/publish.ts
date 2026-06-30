@@ -26,7 +26,7 @@ export type VersionManifest = z.infer<typeof VersionManifestSchema>;
 export const AttachmentSchema = z.object({
   content_type: z.string().optional(),
   data: z.string().optional(),
-  length: z.number().optional(),
+  length: z.coerce.number().optional(),
 });
 export type Attachment = z.infer<typeof AttachmentSchema>;
 

@@ -60,6 +60,26 @@ describe("searchPackages", () => {
     }
   });
 
+  it("coerces numeric-string fields the live registry sends (dependents/total)", async () => {
+    // The npm registry documents `dependents` as a number but returns it as a
+    // numeric string (e.g. "6371"). Coercion must yield a real number.
+    server.use(
+      reg.get("/-/v1/search", () =>
+        HttpResponse.json({
+          objects: [{ package: { name: "vite" }, dependents: "6371", searchScore: 42 }],
+          total: "61398",
+        }),
+      ),
+    );
+    const r = await searchPackages({ text: "vite" }, makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.objects[0]?.dependents).toBe(6371);
+      expect(typeof r.data.objects[0]?.dependents).toBe("number");
+      expect(r.data.total).toBe(61398);
+    }
+  });
+
   it("unwrap() throws on a 400 error", async () => {
     server.use(
       reg.get("/-/v1/search", () =>

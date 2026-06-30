@@ -7,14 +7,14 @@ export type BulkAuditInput = z.infer<typeof BulkAuditInputSchema>;
 /** A single advisory/vulnerability entry. */
 export const AdvisorySchema = z
   .object({
-    id: z.number(),
+    id: z.coerce.number(),
     url: z.string().optional(),
     title: z.string().optional(),
     severity: z.enum(["info", "low", "moderate", "high", "critical"]).optional(),
     vulnerable_versions: z.string().optional(),
     cwe: z.array(z.string()).optional(),
     cvss: z
-      .object({ score: z.number().optional(), vector: z.string().optional() })
+      .object({ score: z.coerce.number().optional(), vector: z.string().optional() })
       .passthrough()
       .optional(),
     overview: z.string().optional(),

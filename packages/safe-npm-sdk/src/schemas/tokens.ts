@@ -36,7 +36,7 @@ export type Token = z.infer<typeof TokenSchema>;
 /** Paginated list of tokens. */
 export const TokenListSchema = z.object({
   objects: z.array(TokenSchema),
-  total: z.number().optional(),
+  total: z.coerce.number().optional(),
   urls: z.record(z.string(), z.string()).optional(),
 });
 export type TokenList = z.infer<typeof TokenListSchema>;

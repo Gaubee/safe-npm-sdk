@@ -17,9 +17,9 @@ export type StagePackageVersion = z.infer<typeof StagePackageVersionSchema>;
 /** Paginated list of staged package versions. */
 export const StagePackageListSchema = z.object({
   items: z.array(StagePackageVersionSchema),
-  page: z.number().optional(),
-  perPage: z.number().optional(),
-  total: z.number().optional(),
+  page: z.coerce.number().optional(),
+  perPage: z.coerce.number().optional(),
+  total: z.coerce.number().optional(),
 });
 export type StagePackageList = z.infer<typeof StagePackageListSchema>;
 
