@@ -8,9 +8,16 @@ import { fileURLToPath } from "node:url";
 // Rebuild the SDK (`vp run --filter safe-npm-sdk build`) to pick up changes.
 export default defineConfig({
   root: fileURLToPath(new URL("./", import.meta.url)),
+  build: {
+    minify: true,
+  },
+  experimental: {
+    bundledDev: true, // 开启实验性打包开发模式
+  },
   server: {
     port: 5173,
     open: true,
+
     proxy: {
       // Same-origin proxy to the npm registry. The browser can't call
       // registry.npmjs.org directly (no CORS), so requests go to /api/... on

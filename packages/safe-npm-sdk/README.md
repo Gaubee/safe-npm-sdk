@@ -7,6 +7,7 @@ A modern TypeScript SDK for the [npm registry API](https://github.com/npm/regist
 - **Typed & validated** — every response is parsed with a zod schema; types are inferred.
 - **`{ data, error, response }` results that never throw** — plus `.unwrap()` / `.unwrapOr()` / `.map()` for ergonomic chaining.
 - **First-class 2FA, `npm-notice`, WebAuthn** — the npm-specific bits are modeled, not bolted on.
+- **Browser-friendly** — the Node-only `buildPublishPackument` (which uses `node:crypto`) is loaded via a deferred import, so importing the SDK in a browser never touches `node:crypto`; combined with `sideEffects: false`, bundlers tree-shake it out entirely.
 
 ## Install
 
@@ -106,7 +107,7 @@ The `npm-notice` response header (e.g. the token-reveal warning) is delivered to
 
 ## Publishing with buildPublishPackument
 
-Building the publish body by hand (integrity, shasum, base64, `_id`, `dist-tags`, `_attachments`) is tedious. `buildPublishPackument` is a **pure utility** (no client needed) that does it all — mirroring npm's own `libnpmpublish`:
+Building the publish body by hand (integrity, shasum, base64, `_id`, `dist-tags`, `_attachments`) is tedious. `buildPublishPackument` is a **pure utility** (no client needed) that does it all — mirroring npm's own `libnpmpublish`. It uses `node:crypto`, so it's **Node-only**; but the import is deferred, so importing it in a browser bundle never loads `node:crypto` (bundlers tree-shake it away via `sideEffects: false`).
 
 ```ts
 import { readFileSync } from "node:fs";

@@ -18,7 +18,7 @@
  * await publish(manifest.name, packument, { otp: "123456" });
  * ```
  */
-import { createHash } from "node:crypto";
+import defer * as crypto from "node:crypto";
 import type { PublishPackument } from "./schemas/publish";
 
 /** Options for {@link buildPublishPackument}. */
@@ -66,8 +66,8 @@ export function buildPublishPackument(
   const tarballUrl = `${registry}/${name}/-/${tarballName}`;
 
   // SRI integrity (sha512-<base64>) and shasum (sha1 hex).
-  const integrity = `sha512-${createHash("sha512").update(buf).digest("base64")}`;
-  const shasum = createHash("sha1").update(buf).digest("hex");
+  const integrity = `sha512-${crypto.createHash("sha512").update(buf).digest("base64")}`;
+  const shasum = crypto.createHash("sha1").update(buf).digest("hex");
   const data = Buffer.from(buf).toString("base64");
 
   const dist = { integrity, shasum, tarball: tarballUrl };
