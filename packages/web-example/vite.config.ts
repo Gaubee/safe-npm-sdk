@@ -28,10 +28,16 @@ export default defineConfig({
         rewrite: (p) => p.replace(/^\/api/, ""),
         // headers are forwarded by default (Authorization, npm-otp, ...)
         configure: (proxy) => {
-          // Defense in depth: this example only exposes GET endpoints. Reject
-          // any write method so a frontend bug can never publish/delete.
+          // Defense in depth: allow GET (read-only) and DELETE only on the
+          // token endpoint (needed by verifyCredentials' OTP probe). All other
+          // write methods (PUT/POST for publish/create/trust/...) are rejected
+          // so this playground can never publish, create, or mutate config.
           proxy.on("proxyReq", (proxyReq, req) => {
-            if (req.method !== "GET") {
+            const url = req.url ?? "";
+            const isGet = req.method === "GET";
+            const isTokenDelete =
+              req.method === "DELETE" && /\/-\/npm\/v1\/tokens\/token\//.test(url);
+            if (!isGet && !isTokenDelete) {
               proxyReq.destroy();
             }
           });
