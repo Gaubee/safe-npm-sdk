@@ -47,7 +47,7 @@ describe("trust", () => {
     server.use(
       reg.get("/-/package/@scope%2Fpkg/trust", ({ request }) => {
         expect(request.headers.get("npm-otp")).toBe("333333");
-        return HttpResponse.json([{ id: "12345678-1234-1234-1234-123456789abc", ...githubCfg }]);
+        return HttpResponse.json([{ id: "12345678-1234-8234-8234-123456789abc", ...githubCfg }]);
       }),
     );
     const r = await getTrustedPublishers("@scope/pkg", { otp: "333333" }, makeClient());
@@ -64,7 +64,7 @@ describe("trust", () => {
         expect(Array.isArray(body)).toBe(true);
         expect(body).toHaveLength(1);
         expect((body[0] as Record<string, unknown>).type).toBe("github");
-        return HttpResponse.json([{ id: "12345678-1234-1234-1234-123456789abc", ...githubCfg }]);
+        return HttpResponse.json([{ id: "12345678-1234-8234-8234-123456789abc", ...githubCfg }]);
       }),
     );
     const r = await configureTrustedPublisher(
@@ -122,7 +122,7 @@ describe("stage", () => {
         expect(url.searchParams.get("package")).toBe("@scope/pkg");
         expect(url.searchParams.get("page")).toBe("0");
         return HttpResponse.json({
-          items: [{ id: "11111111-1111-1111-1111-111111111111", packageName: "@scope/pkg" }],
+          items: [{ id: "11111111-1111-8111-8111-111111111111", packageName: "@scope/pkg" }],
           page: 0,
           perPage: 10,
           total: 1,
@@ -142,7 +142,7 @@ describe("stage", () => {
         return HttpResponse.json(
           {
             message: "Package version staged successfully.",
-            stageId: "11111111-1111-1111-1111-111111111111",
+            stageId: "11111111-1111-8111-8111-111111111111",
           },
           { status: 201 },
         );
@@ -158,20 +158,20 @@ describe("stage", () => {
       makeClient(),
     );
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.data.stageId).toBe("11111111-1111-1111-1111-111111111111");
+    if (r.ok) expect(r.data.stageId).toBe("11111111-1111-8111-8111-111111111111");
   });
 
   it("getStagePackageVersion", async () => {
     server.use(
       reg.get("/-/stage/:id", () =>
         HttpResponse.json({
-          id: "11111111-1111-1111-1111-111111111111",
+          id: "11111111-1111-8111-8111-111111111111",
           packageName: "@scope/pkg",
           version: "1.0.0",
         }),
       ),
     );
-    const r = await getStagePackageVersion("11111111-1111-1111-1111-111111111111", makeClient());
+    const r = await getStagePackageVersion("11111111-1111-8111-8111-111111111111", makeClient());
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.packageName).toBe("@scope/pkg");
   });
@@ -184,7 +184,7 @@ describe("stage", () => {
       }),
     );
     const r = await deleteStagePackageVersion(
-      "11111111-1111-1111-1111-111111111111",
+      "11111111-1111-8111-8111-111111111111",
       { otp: "444444" },
       makeClient(),
     );
@@ -202,7 +202,7 @@ describe("stage", () => {
       }),
     );
     const r = await approveStagePackageVersion(
-      "11111111-1111-1111-1111-111111111111",
+      "11111111-1111-8111-8111-111111111111",
       { otp: "444444" },
       makeClient(),
     );
@@ -219,7 +219,7 @@ describe("stage", () => {
           }),
       ),
     );
-    const r = await getStagePackageTarball("11111111-1111-1111-1111-111111111111", makeClient());
+    const r = await getStagePackageTarball("11111111-1111-8111-8111-111111111111", makeClient());
     expect(r.ok).toBe(true);
   });
 });

@@ -56,6 +56,10 @@ export {
   deleteTrustedPublisher,
 } from "./operations/trust";
 
+// Operations — Unpublish (live version removal)
+export { unpublishPackage } from "./operations/unpublish";
+export type { UnpublishResult } from "./operations/unpublish";
+
 // Operations — Stage
 export {
   getStageItems,

@@ -118,20 +118,26 @@ if (!r.ok) {
 
 ## Endpoint coverage
 
-All 32 registry operations are implemented:
+Every registry operation in the SDK maps 1:1 to an operation in the OpenAPI
+spec, plus `unpublishPackage` for removing a live version. The table below is
+generated from `src/operations/` — regenerate with `node scripts/gen-readme-fragments.mjs`.
 
-| Group       | Operations                                                                                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tokens**  | `listTokens`, `createToken`, `deleteToken`                                                                                                                          |
-| **OIDC**    | `exchangeOidcToken`                                                                                                                                                 |
-| **Trust**   | `getTrustedPublishers`, `configureTrustedPublisher`, `deleteTrustedPublisher`                                                                                       |
-| **Access**  | `getTeamPackageGrants`, `createTeamPackageGrant`, `deleteTeamPackageGrant`, `getOrgPackages`, `getPackageCollaborators`, `getPackageVisibility`, `setPackageAccess` |
-| **Audit**   | `bulkAudit`                                                                                                                                                         |
-| **Org**     | `getOrgMembership`, `changeOrgMembership`, `deleteOrgMembership`, `getScopeTeams`                                                                                   |
-| **Team**    | `createTeam`, `deleteTeam`, `getTeamMembership`, `createTeamMembership`, `deleteTeamMembership`                                                                     |
-| **Publish** | `publish`                                                                                                                                                           |
-| **Search**  | `searchPackages`                                                                                                                                                    |
-| **Stage**   | `getStageItems`, `stagePackageVersion`, `getStagePackageVersion`, `deleteStagePackageVersion`, `approveStagePackageVersion`, `getStagePackageTarball`               |
+<!-- BEGIN ENDPOINTS -->
+
+| Group          | Operations                                                                                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tokens**     | `listTokens`, `createToken`, `deleteToken`                                                                                                                                         |
+| **OIDC**       | `exchangeOidcToken`                                                                                                                                                                |
+| **Trust**      | `getTrustedPublishers`, `configureTrustedPublisher`, `deleteTrustedPublisher`                                                                                                      |
+| **Unpublish**  | `unpublishPackage`                                                                                                                                                                 |
+| **Access**     | `getTeamPackageGrants`, `createTeamPackageGrant`, `deleteTeamPackageGrant`, `getOrgPackages`, `getPackageCollaborators`, `getPackageVisibility`, `setPackageAccess`                |
+| **Audit**      | `bulkAudit`                                                                                                                                                                        |
+| **Org & Team** | `getOrgMembership`, `changeOrgMembership`, `deleteOrgMembership`, `getScopeTeams`, `createTeam`, `deleteTeam`, `getTeamMembership`, `createTeamMembership`, `deleteTeamMembership` |
+| **Publish**    | `publish`                                                                                                                                                                          |
+| **Search**     | `searchPackages`                                                                                                                                                                   |
+| **Stage**      | `getStageItems`, `stagePackageVersion`, `getStagePackageVersion`, `deleteStagePackageVersion`, `approveStagePackageVersion`, `getStagePackageTarball`                              |
+
+<!-- END ENDPOINTS -->
 
 Scoped package names (`@scope/pkg`) are URL-escaped automatically.
 
