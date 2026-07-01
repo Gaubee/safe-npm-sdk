@@ -4,8 +4,11 @@
  * the sha512 integrity + sha1 shasum, base64-encodes the tarball, and assembles
  * the full `PUT /<pkg>` body shape.
  *
- * This is a **pure function with no client/IO dependency** — call it, then pass
- * its result to {@link publish}.
+ * This is a **pure utility with no client/IO dependency** — call it, then pass
+ * its result to {@link publish}. It is async because hashing goes through the
+ * Web Crypto API (`globalThis.crypto.subtle`), which is natively available in
+ * browsers and Node 18+, so the same function works cross-platform with zero
+ * Node-only imports.
  *
  * @example
  * ```ts
@@ -14,11 +17,10 @@
  *
  * const manifest = JSON.parse(readFileSync("package.json", "utf8"));
  * const tarball = readFileSync("my-pkg-1.0.0.tgz");
- * const packument = buildPublishPackument(manifest, tarball);
+ * const packument = await buildPublishPackument(manifest, tarball);
  * await publish(manifest.name, packument, { otp: "123456" });
  * ```
  */
-import defer * as crypto from "node:crypto";
 import type { PublishPackument } from "./schemas/publish";
 
 /** Options for {@link buildPublishPackument}. */
@@ -32,18 +34,41 @@ export interface BuildPublishPackumentOptions {
 }
 
 /**
+ * Compute a hash digest of `data` with the given Web Crypto algorithm name
+ * (e.g. `"SHA-512"`, `"SHA-1"`), returned as a lowercase hex string. Works in
+ * browsers and Node 18+ via `globalThis.crypto.subtle`.
+ */
+async function digestHex(algorithm: string, data: Uint8Array): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(algorithm, data);
+  const bytes = new Uint8Array(digest);
+  let hex = "";
+  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+  return hex;
+}
+
+/** Base64-encode a Uint8Array without relying on Node's Buffer. */
+function toBase64(data: Uint8Array): string {
+  let binary = "";
+  for (const b of data) binary += String.fromCharCode(b);
+  // btoa is available in browsers and Node 16+.
+  const encoder =
+    typeof btoa === "function" ? btoa : (s: string) => Buffer.from(s, "binary").toString("base64");
+  return encoder(binary);
+}
+
+/**
  * Build a publish-ready packument body from a manifest and tarball data.
  *
  * @param manifest - The package.json object; must have at least `name` and `version`.
- * @param tarballData - The packed `.tgz` contents (Buffer / Uint8Array).
+ * @param tarballData - The packed `.tgz` contents (Uint8Array / ArrayBuffer / Buffer).
  * @param opts - Optional tag / access / registry overrides.
  * @returns A {@link PublishPackument} ready to pass to {@link publish}.
  */
-export function buildPublishPackument(
+export async function buildPublishPackument(
   manifest: Record<string, unknown>,
   tarballData: Uint8Array | ArrayBuffer | Buffer,
   opts: BuildPublishPackumentOptions = {},
-): PublishPackument {
+): Promise<PublishPackument> {
   // Coerce name/version defensively; they're `unknown` from the manifest type.
   const nameRaw = manifest.name;
   const versionRaw = manifest.version;
@@ -65,10 +90,14 @@ export function buildPublishPackument(
   const tarballName = `${tarballBase}-${version}.tgz`;
   const tarballUrl = `${registry}/${name}/-/${tarballName}`;
 
-  // SRI integrity (sha512-<base64>) and shasum (sha1 hex).
-  const integrity = `sha512-${crypto.createHash("sha512").update(buf).digest("base64")}`;
-  const shasum = crypto.createHash("sha1").update(buf).digest("hex");
-  const data = Buffer.from(buf).toString("base64");
+  // SRI integrity (sha512-<base64>) and shasum (sha1 hex), via the cross-platform
+  // Web Crypto API — no node:crypto import, so this runs in browsers too.
+  const sha512Hex = await digestHex("SHA-512", buf);
+  const sha1Hex = await digestHex("SHA-1", buf);
+  // integrity is the sha512 digest as base64 (hex → bytes → base64)
+  const integrity = `sha512-${hexToBase64(sha512Hex)}`;
+  const shasum = sha1Hex;
+  const data = toBase64(buf);
 
   const dist = { integrity, shasum, tarball: tarballUrl };
   const versionId = `${name}@${version}`;
@@ -91,4 +120,13 @@ export function buildPublishPackument(
     },
     access,
   } as PublishPackument;
+}
+
+/** Convert a hex string to base64 (used to build the SRI integrity value). */
+function hexToBase64(hex: string): string {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes.set([Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16)], i);
+  }
+  return toBase64(bytes);
 }

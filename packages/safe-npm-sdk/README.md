@@ -7,7 +7,7 @@ A modern TypeScript SDK for the [npm registry API](https://github.com/npm/regist
 - **Typed & validated** — every response is parsed with a zod schema; types are inferred.
 - **`{ data, error, response }` results that never throw** — plus `.unwrap()` / `.unwrapOr()` / `.map()` for ergonomic chaining.
 - **First-class 2FA, `npm-notice`, WebAuthn** — the npm-specific bits are modeled, not bolted on.
-- **Browser-friendly** — the Node-only `buildPublishPackument` (which uses `node:crypto`) is loaded via a deferred import, so importing the SDK in a browser never touches `node:crypto`; combined with `sideEffects: false`, bundlers tree-shake it out entirely.
+- **Cross-platform** — hashing uses the Web Crypto API (`globalThis.crypto.subtle`), so the SDK has **zero Node-only imports** and runs natively in browsers, Node 18+, Deno, and Bun.
 
 ## Install
 
@@ -107,7 +107,7 @@ The `npm-notice` response header (e.g. the token-reveal warning) is delivered to
 
 ## Publishing with buildPublishPackument
 
-Building the publish body by hand (integrity, shasum, base64, `_id`, `dist-tags`, `_attachments`) is tedious. `buildPublishPackument` is a **pure utility** (no client needed) that does it all — mirroring npm's own `libnpmpublish`. It uses `node:crypto`, so it's **Node-only**; but the import is deferred, so importing it in a browser bundle never loads `node:crypto` (bundlers tree-shake it away via `sideEffects: false`).
+Building the publish body by hand (integrity, shasum, base64, `_id`, `dist-tags`, `_attachments`) is tedious. `buildPublishPackument` is a **pure utility** (no client needed) that does it all — mirroring npm's own `libnpmpublish`. It's **async** (hashing goes through the Web Crypto API), so it works cross-platform with no Node-only imports:
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -116,8 +116,8 @@ import { buildPublishPackument, publish } from "safe-npm-sdk";
 const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 const tarball = readFileSync("my-pkg-1.0.0.tgz");
 
-// Pure function: manifest + tarball buffer → complete publish body.
-const packument = buildPublishPackument(manifest, tarball);
+// Pure async function: manifest + tarball buffer → complete publish body.
+const packument = await buildPublishPackument(manifest, tarball);
 
 await publish(manifest.name, packument, { otp: "123456" });
 ```
