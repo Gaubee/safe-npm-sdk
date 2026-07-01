@@ -12,8 +12,12 @@ import {
 
 /** Options shared by operations that require 2FA. */
 export interface OtpOptions {
-  /** One-time password for two-factor authentication. */
-  otp: string;
+  /**
+   * One-time password for two-factor authentication. Pass the code to send it,
+   * or `null` to explicitly skip it (when you're certain 2FA isn't required).
+   * Not optional — npm write operations generally require 2FA.
+   */
+  otp: string | null;
   /** Authentication type. `"web"` enables the browser-based WebAuthn flow. */
   authType?: "web";
   /** Command context, e.g. `"token"`. */

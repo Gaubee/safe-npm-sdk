@@ -2,8 +2,8 @@ import type { ApiResponse } from "./result";
 
 /** Options for building npm-specific request headers. */
 export interface AuthHeaderOptions {
-  /** One-time password for two-factor authentication. */
-  otp?: string;
+  /** One-time password for two-factor authentication. `null` skips it. */
+  otp?: string | null;
   /** Authentication type. `"web"` enables the browser-based WebAuthn flow. */
   authType?: "web";
   /** Command context, e.g. `"token"` or `"trust"`. */
@@ -12,11 +12,12 @@ export interface AuthHeaderOptions {
 
 /**
  * Build npm-specific headers (`npm-otp`, `npm-auth-type`, `npm-command`) from
- * the provided options. Returns an empty object when nothing is set.
+ * the provided options. Returns an empty object when nothing is set. Only a
+ * real (non-null) OTP string is emitted as `npm-otp`.
  */
 export function buildNpmHeaders(opts: AuthHeaderOptions = {}): Record<string, string> {
   const headers: Record<string, string> = {};
-  if (opts.otp !== undefined) headers["npm-otp"] = opts.otp;
+  if (typeof opts.otp === "string") headers["npm-otp"] = opts.otp;
   if (opts.authType !== undefined) headers["npm-auth-type"] = opts.authType;
   if (opts.command !== undefined) headers["npm-command"] = opts.command;
   return headers;

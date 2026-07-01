@@ -40,6 +40,10 @@ export {
 export { publish } from "./operations/publish";
 export type { PublishOptions } from "./operations/publish";
 
+// Publish body builder (pure utility, no client needed)
+export { buildPublishPackument } from "./publish-packument";
+export type { BuildPublishPackumentOptions } from "./publish-packument";
+
 // Operations — Search
 export { searchPackages } from "./operations/search";
 

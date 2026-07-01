@@ -2,13 +2,13 @@ import type { ZodType } from "zod";
 import { NpmApiError } from "./error";
 import { type Result, err, ok } from "./result";
 
-/** Authentication credentials. */
+/** Authentication credentials. Omit for an anonymous client (no auth header). */
 export type Auth = { readonly token: string } | { readonly oidcIdToken: string };
 
 /** Options for constructing a client. */
 export interface ClientOptions {
-  /** Authentication credentials. Required. */
-  auth: Auth;
+  /** Authentication credentials. Omit for an anonymous client (e.g. public search). */
+  auth?: Auth;
   /** Base registry URL. Defaults to the public npm registry. */
   registry?: string;
   /** Custom fetch implementation (testing, Deno, etc.). Defaults to global fetch. */
@@ -30,16 +30,16 @@ export interface RequestOptions {
   body?: unknown;
   /** Zod schema used to validate the parsed JSON response body. */
   schema: ZodType<unknown>;
-  /** OTP for 2FA. Injected as the `npm-otp` header. */
-  otp?: string;
+  /** OTP for 2FA. A string is sent as the `npm-otp` header; `null`/`undefined` are not. */
+  otp?: string | null;
   /** Extra npm headers (npm-auth-type, npm-command, ...). */
   extraHeaders?: Record<string, string>;
 }
 
-/** An authenticated npm registry client. */
+/** An npm registry client (optionally anonymous). */
 export interface NpmClient {
   readonly registry: string;
-  readonly auth: Auth;
+  readonly auth: Auth | undefined;
   readonly timeout: number;
   readonly retries: number;
   /** Low-level request engine used by all operations. */
@@ -96,9 +96,9 @@ function buildUrl(registry: string, path: string, query?: RequestOptions["query"
   return url;
 }
 
-function authHeader(auth: Auth): string {
-  const tok = "token" in auth ? auth.token : auth.oidcIdToken;
-  return `Bearer ${tok}`;
+function authToken(auth: Auth | undefined): string | undefined {
+  if (!auth) return undefined;
+  return "token" in auth ? auth.token : auth.oidcIdToken;
 }
 
 async function parseBody(res: Response): Promise<unknown> {
@@ -156,14 +156,24 @@ function redactForLog(value: unknown): unknown {
 
 /**
  * Build a compact, redacted description of a request for error messages.
- * Shows method + URL (with redacted query) + redacted body, so failures are
- * debuggable without leaking tokens, passwords, or OTPs.
+ * Shows method + URL (with redacted query) + auth/otp presence + redacted body,
+ * so failures are debuggable without leaking tokens, passwords, or OTPs.
+ * `auth` and `otp` are reported only as present/absent (never their values).
  */
-function describeRequest(method: string, url: URL, body: unknown): string {
+function describeRequest(
+  method: string,
+  url: URL,
+  body: unknown,
+  context?: { hasAuth: boolean; otp: string | null | undefined },
+): string {
   const q: Record<string, string> = {};
   for (const [k, v] of url.searchParams.entries()) q[k] = String(redactValue(k, v));
   const qs = Object.keys(q).length ? `?${new URLSearchParams(q).toString()}` : "";
   const parts = [`${method} ${url.origin}${url.pathname}${qs}`];
+  if (context) {
+    parts.push(`auth=${context.hasAuth ? "yes" : "anonymous"}`);
+    parts.push(`otp=${typeof context.otp === "string" ? "yes" : "no"}`);
+  }
   if (body !== undefined) {
     try {
       parts.push(`body=${JSON.stringify(redactForLog(body))}`);
@@ -182,12 +192,13 @@ async function doRequest(
 ): Promise<Result<unknown>> {
   const url = buildUrl(client.registry, opts.path, opts.query);
 
-  const headers = new Headers({
-    Authorization: authHeader(client.auth),
-    Accept: "application/json",
-    ...opts.extraHeaders,
-  });
-  if (opts.otp !== undefined) headers.set("npm-otp", opts.otp);
+  // Inject Authorization only when the client carries credentials. An anonymous
+  // client (auth omitted) skips the header entirely (e.g. public search).
+  const tok = authToken(client.auth);
+  const headers = new Headers({ Accept: "application/json", ...opts.extraHeaders });
+  if (tok !== undefined) headers.set("Authorization", `Bearer ${tok}`);
+  // OTP: only a real (non-null) string is sent as the npm-otp header.
+  if (typeof opts.otp === "string") headers.set("npm-otp", opts.otp);
   const hasBody = opts.body !== undefined;
   if (hasBody) headers.set("Content-Type", "application/json");
 
@@ -217,7 +228,7 @@ async function doRequest(
       }
       const error = new NpmApiError({
         status: 0,
-        message: `network error: ${e instanceof Error ? e.message : "unknown"} [${describeRequest(opts.method, url, opts.body)}]`,
+        message: `network error: ${e instanceof Error ? e.message : "unknown"} [${describeRequest(opts.method, url, opts.body, { hasAuth: tok !== undefined, otp: opts.otp })}]`,
         body: undefined,
         headers: new Headers(),
         request: reqMeta,
@@ -241,7 +252,7 @@ async function doRequest(
       }
       const error = new NpmApiError({
         status: res.status,
-        message: `${extractMessage(body, `request failed with status ${res.status}`)} [${describeRequest(opts.method, url, opts.body)}]`,
+        message: `${extractMessage(body, `request failed with status ${res.status}`)} [${describeRequest(opts.method, url, opts.body, { hasAuth: tok !== undefined, otp: opts.otp })}]`,
         body,
         headers: res.headers,
         request: reqMeta,
@@ -257,7 +268,7 @@ async function doRequest(
         .join("; ");
       const error = new NpmApiError({
         status: res.status,
-        message: `response schema validation failed: ${issues} [${describeRequest(opts.method, url, opts.body)}]`,
+        message: `response schema validation failed: ${issues} [${describeRequest(opts.method, url, opts.body, { hasAuth: tok !== undefined, otp: opts.otp })}]`,
         body,
         headers: res.headers,
         request: reqMeta,

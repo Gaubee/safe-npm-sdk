@@ -140,6 +140,92 @@ describe("request engine: auth & otp headers", () => {
     });
     expect(r.ok).toBe(true);
   });
+
+  it("does not send Authorization when the client has no auth (anonymous)", async () => {
+    server.use(
+      reg.get("/-/v1/search", ({ request }) => {
+        expect(request.headers.get("authorization")).toBeNull();
+        return HttpResponse.json({ objects: [] });
+      }),
+    );
+    const c = makeClient({ auth: undefined });
+    const r = await c.request({
+      method: "GET",
+      path: "/-/v1/search",
+      schema: z.object({ objects: z.array(z.unknown()) }),
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("does not send npm-otp when otp is null", async () => {
+    server.use(
+      reg.post("/-/npm/v1/tokens", ({ request }) => {
+        expect(request.headers.get("npm-otp")).toBeNull();
+        return HttpResponse.json({ key: "abc" }, { status: 201 });
+      }),
+    );
+    const c = makeClient();
+    await c.request({
+      method: "POST",
+      path: "/-/npm/v1/tokens",
+      otp: null,
+      schema: z.object({ key: z.string() }),
+    });
+  });
+
+  it("sends npm-otp when otp is a string", async () => {
+    server.use(
+      reg.post("/-/npm/v1/tokens", ({ request }) => {
+        expect(request.headers.get("npm-otp")).toBe("998877");
+        return HttpResponse.json({ key: "abc" }, { status: 201 });
+      }),
+    );
+    const c = makeClient();
+    await c.request({
+      method: "POST",
+      path: "/-/npm/v1/tokens",
+      otp: "998877",
+      schema: z.object({ key: z.string() }),
+    });
+  });
+
+  it("reports auth=anonymous/otp=no in the error message", async () => {
+    server.use(
+      reg.get("/-/v1/search", () => HttpResponse.json({ message: "nope" }, { status: 403 })),
+    );
+    const c = makeClient({ auth: undefined });
+    const r = await c.request({
+      method: "GET",
+      path: "/-/v1/search",
+      otp: null,
+      schema: z.unknown(),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.message).toContain("auth=anonymous");
+      expect(r.error.message).toContain("otp=no");
+    }
+  });
+
+  it("reports auth=yes/otp=yes in the error message", async () => {
+    server.use(
+      reg.post("/-/npm/v1/tokens", () =>
+        HttpResponse.json({ message: "bad otp" }, { status: 401 }),
+      ),
+    );
+    const c = makeClient();
+    const r = await c.request({
+      method: "POST",
+      path: "/-/npm/v1/tokens",
+      otp: "123456",
+      schema: z.unknown(),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.message).toContain("auth=yes");
+      expect(r.error.message).toContain("otp=yes");
+    }
+  });
 });
 
 describe("request engine: notice & errors", () => {

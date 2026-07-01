@@ -47,6 +47,9 @@ createClient({ auth: { token: "npm_xxx" } });
 
 // OIDC id_token (only for the OIDC token-exchange endpoint)
 createClient({ auth: { oidcIdToken: "eyJhbGci..." } });
+
+// Anonymous — no Authorization header (public endpoints like search)
+createClient({});
 ```
 
 You can configure the registry, timeout, retries, and a `npm-notice` listener:
@@ -85,19 +88,40 @@ const names = r.map((p) => Object.keys(p)); // transform success data
 
 ## 2FA (OTP)
 
-Mutating endpoints (token create/delete, trust, stage approve/delete) require a one-time password. Pass it as an explicit option so it can't be forgotten:
+Mutating endpoints (token create/delete, trust, stage approve/delete, publish, unpublish) require a one-time password. The `otp` option is **not optional** — npm write operations generally require 2FA. Pass the OTP code, or `null` only if you're certain 2FA is disabled:
 
 ```ts
 import { createToken } from "safe-npm-sdk";
 
 const r = await createToken(
   { password, name: "ci", packages: ["*"] },
-  { otp: "123456" }, // required
+  { otp: "123456" }, // required — the 6-digit code, or null to skip
 );
 if (r.ok) console.log("store this once:", r.data.token); // full token, shown only now
 ```
 
+When a request fails, the error message reports `auth=yes|anonymous` and `otp=yes|no` so you can spot a missing OTP at a glance (a missing OTP is the #1 cause of mysterious 404s from `publish`).
+
 The `npm-notice` response header (e.g. the token-reveal warning) is delivered to `onNotice` **and** available on the error/result via `response.headers`.
+
+## Publishing with buildPublishPackument
+
+Building the publish body by hand (integrity, shasum, base64, `_id`, `dist-tags`, `_attachments`) is tedious. `buildPublishPackument` is a **pure utility** (no client needed) that does it all — mirroring npm's own `libnpmpublish`:
+
+```ts
+import { readFileSync } from "node:fs";
+import { buildPublishPackument, publish } from "safe-npm-sdk";
+
+const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+const tarball = readFileSync("my-pkg-1.0.0.tgz");
+
+// Pure function: manifest + tarball buffer → complete publish body.
+const packument = buildPublishPackument(manifest, tarball);
+
+await publish(manifest.name, packument, { otp: "123456" });
+```
+
+It computes the `sha512-` integrity and `sha1` shasum from the tarball, base64-encodes it, and assembles `_id`/`dist-tags`/`versions`/`_attachments`/`access`. Scoped-package tarball names are handled automatically.
 
 ## WebAuthn flow
 
