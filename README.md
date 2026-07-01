@@ -1,5 +1,7 @@
 # safe-npm-sdk
 
+English | [简体中文](./README.zh-CN.md)
+
 > A TypeScript SDK for the npm registry API, built from the **official OpenAPI
 > spec scraped from [api-docs.npmjs.com](https://api-docs.npmjs.com)**.
 
@@ -67,11 +69,11 @@ silently failing.
 This repo uses [Vite+](https://viteplus.dev/) (`vp`) as its unified toolchain.
 
 ```bash
-vp install                                              # install deps
-vp check                                                # format + lint + type check
-vp test                                                 # vitest + msw (no real token needed)
-vp run --filter safe-npm-sdk build                      # pack the SDK (js + d.ts)
-vp dev packages/web-example                             # run the browser playground
+vp install        # install deps
+vp check          # format + lint + type check
+vp test           # vitest + msw (no real token needed)
+vp build          # pack the SDK (js + d.ts), vp run --filter safe-npm-sdk build
+vp dev            # run the browser playground, vp dev packages/web-example
 ```
 
 ## License
