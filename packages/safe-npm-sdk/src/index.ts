@@ -44,6 +44,10 @@ export type { PublishOptions } from "./operations/publish";
 export { buildPublishPackument } from "./publish-packument";
 export type { BuildPublishPackumentOptions } from "./publish-packument";
 
+// Credentials verification (side-effect-free auth + OTP check)
+export { verifyCredentials } from "./verify-credentials";
+export type { VerificationResult } from "./verify-credentials";
+
 // Operations — Search
 export { searchPackages } from "./operations/search";
 

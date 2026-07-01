@@ -120,7 +120,10 @@
           <label for="otp">OTP (only if a GET requires 2FA)</label>
           <input id="otp" type="text" inputmode="numeric" placeholder="123456" autocomplete="off" />
         </div>
-        <div style="flex: 0 0 auto; align-self: flex-end">
+        <div style="flex: 0 0 auto; align-self: flex-end; display: flex; gap: 8px">
+          <button id="verify" type="button" style="margin-top: 0; background: #1d8127">
+            Verify
+          </button>
           <button id="clear" type="button" style="margin-top: 0">Clear</button>
         </div>
       </div>
@@ -163,6 +166,7 @@
     <script type="module">
       import {
         createClient,
+        verifyCredentials,
         searchPackages,
         listTokens,
         getPackageVisibility,
@@ -180,6 +184,7 @@
       const tokenInput = document.getElementById("token");
       const otpInput = document.getElementById("otp");
       const clearBtn = document.getElementById("clear");
+      const verifyBtn = document.getElementById("verify");
 
       // ----- Persistence (localStorage). OTP is intentionally never stored. -----
       const STORAGE_KEY = "safe-npm-sdk:example";
@@ -290,6 +295,53 @@
         renderParams();
       });
       renderParams();
+
+      // Verify the entered credentials (token + optional OTP), side-effect-free.
+      verifyBtn.addEventListener("click", async () => {
+        verifyBtn.disabled = true;
+        out.className = "";
+        out.textContent = "…verifying…";
+        const token = tokenInput.value.trim();
+        const otp = otpInput.value.trim();
+        if (!token) {
+          out.className = "err";
+          out.textContent = "⚠️ Enter an access token to verify.";
+          verifyBtn.disabled = false;
+          return;
+        }
+        const client = createClient({ auth: { token }, registry: "/api", retries: 0 });
+        try {
+          const r = await verifyCredentials(client, { otp: otp || null });
+          if (r.ok) {
+            const v = r.data;
+            const auth = v.authValid ? "✅ valid" : "❌ invalid";
+            const otpStr =
+              v.otpValid === null
+                ? "⏭️ not checked (omit OTP to skip)"
+                : v.otpValid
+                  ? "✅ valid"
+                  : "❌ invalid";
+            out.className = v.authValid && (v.otpValid === null || v.otpValid) ? "ok" : "err";
+            out.textContent =
+              `Credentials check\n` +
+              `  auth: ${auth}\n` +
+              `  otp:  ${otpStr}\n` +
+              (v.requires2FA ? "  (account requires 2FA)\n" : "") +
+              `  ${v.message}\n` +
+              (v.tokens?.length
+                ? `\nTokens on file (${v.tokens.length}):\n${JSON.stringify(v.tokens, null, 2)}`
+                : "");
+          } else {
+            out.className = "err";
+            out.textContent = "❌ " + r.error.status + " " + r.error.message;
+          }
+        } catch (e) {
+          out.className = "err";
+          out.textContent = "⚠️ " + (e?.message || String(e));
+        } finally {
+          verifyBtn.disabled = false;
+        }
+      });
 
       // Clear everything: form fields + localStorage (OTP included in the form reset).
       clearBtn.addEventListener("click", () => {
