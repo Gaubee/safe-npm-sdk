@@ -1,16 +1,13 @@
 import { defineConfig } from "vite-plus";
 import { fileURLToPath } from "node:url";
 
-// In dev, resolve the `safe-npm-sdk` workspace package straight to its source
-// entry so changes hot-reload without a build step. zod resolves normally via
-// node_modules.
+// `safe-npm-sdk` resolves through the pnpm workspace link to the built
+// dist/index.mjs (declared via `exports` in the SDK package.json). The SDK is
+// marked `sideEffects: false`, so Vite tree-shakes the unused, Node-only
+// `buildPublishPackument` (which needs node:crypto) out of the browser bundle.
+// Rebuild the SDK (`vp run --filter safe-npm-sdk build`) to pick up changes.
 export default defineConfig({
   root: fileURLToPath(new URL("./", import.meta.url)),
-  resolve: {
-    alias: {
-      "safe-npm-sdk": fileURLToPath(new URL("../safe-npm-sdk/src/index.ts", import.meta.url)),
-    },
-  },
   server: {
     port: 5173,
     open: true,
