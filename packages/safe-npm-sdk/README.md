@@ -65,6 +65,51 @@ createClient({
 });
 ```
 
+## `null` vs `undefined` convention
+
+The SDK distinguishes `null` from `undefined` deliberately — they are **not**
+interchangeable, and TypeScript (`exactOptionalPropertyTypes`) enforces it:
+
+| Value        | Meaning                                                                    |
+| ------------ | -------------------------------------------------------------------------- |
+| `undefined`  | **Omitted / fallback.** Use the default (global client, endpoint default). |
+| `null`       | **Explicit empty.** Deliberately clear or skip the value.                  |
+| a real value | Use it as provided.                                                        |
+
+### `client`
+
+Every operation's last argument is `client`. The type tells you whether the
+operation may run anonymously:
+
+- `client?: NpmClient` — authentication **required** (e.g. `listTokens`,
+  `getProfile`, `publish`). Passing `null` is a **type error**.
+- `client?: NpmClient | null` — anonymous access is **allowed** (e.g.
+  `searchPackages`, `loginCouch`, `loginWeb`).
+
+```ts
+setDefaultClient(createClient({ auth: { token } }));
+
+listTokens(); // undefined → uses the global default client
+listTokens(myClient); // an explicit client
+searchPackages({}, null); // null      → an ANONYMOUS client (no token),
+//              even though a default is set
+```
+
+`null` gives you a stateless anonymous client (no `Authorization` header, public
+registry) regardless of any global default — useful for public reads or the
+login flow (login _obtains_ a token, so none is assumed).
+
+### `otp`
+
+The same rule applies to `otp?: string | null` on 2FA options:
+
+```ts
+createToken(input, { otp: "123456" }); // send this OTP
+createToken(input, { otp: null }); // explicitly skip the OTP
+createToken(input, {}); // omitted → endpoint default; the
+//   registry will challenge (EOTP) if 2FA is required
+```
+
 ## Results & chaining
 
 Every operation returns a `Result<T>`:
@@ -89,7 +134,7 @@ const names = r.map((p) => Object.keys(p)); // transform success data
 
 ## 2FA (OTP)
 
-Mutating endpoints (token create/delete, trust, stage approve/delete, publish, unpublish) require a one-time password. The `otp` option is **not optional** — npm write operations generally require 2FA. Pass the OTP code, or `null` only if you're certain 2FA is disabled:
+Mutating endpoints (token create/delete, trust, stage approve/delete, publish, unpublish, profile update/password-change/2FA, couch login re-PUT) require a one-time password. npm write operations generally require 2FA, so pass the OTP code. `otp` follows the [`null` vs `undefined` convention](#null-vs-undefined-convention): a string sends it, `null` explicitly skips it, and omitting it lets the registry challenge you with an `EOTP` if 2FA is required:
 
 ```ts
 import { createToken } from "safe-npm-sdk";
@@ -143,9 +188,11 @@ if (!r.ok) {
 
 ## Endpoint coverage
 
-Every registry operation in the SDK maps 1:1 to an operation in the OpenAPI
-spec, plus `unpublishPackage` for removing a live version. The table below is
-generated from `src/operations/` — regenerate with `node scripts/gen-readme-fragments.mjs`.
+Most registry operations in the SDK map 1:1 to an operation in the OpenAPI
+spec. The SDK extensions — `unpublishPackage` (live version removal), the
+**Profile** and **Login** operations — go beyond the official `openapi.json`
+and are documented in `openapi-ext.json`. The table below is generated from
+`src/operations/` — regenerate with `node scripts/gen-readme-fragments.mjs`.
 
 <!-- BEGIN ENDPOINTS -->
 
@@ -161,6 +208,8 @@ generated from `src/operations/` — regenerate with `node scripts/gen-readme-fr
 | **Publish**    | `publish`                                                                                                                                                                          |
 | **Search**     | `searchPackages`                                                                                                                                                                   |
 | **Stage**      | `getStageItems`, `stagePackageVersion`, `getStagePackageVersion`, `deleteStagePackageVersion`, `approveStagePackageVersion`, `getStagePackageTarball`                              |
+| **Profile**    | `getProfile`, `updateProfile`, `changePassword`, `enableTwoFactor`, `disableTwoFactor`                                                                                             |
+| **Login**      | `loginCouch`, `loginWeb`                                                                                                                                                           |
 
 <!-- END ENDPOINTS -->
 

@@ -25,6 +25,8 @@ const GROUP_LABELS = {
   publish: "Publish",
   search: "Search",
   stage: "Stage",
+  profile: "Profile",
+  login: "Login",
 };
 
 // Order of groups in the table (deterministic, not alphabetical).
@@ -39,6 +41,8 @@ const GROUP_ORDER = [
   "publish",
   "search",
   "stage",
+  "profile",
+  "login",
 ];
 
 function extractOperations(filePath) {

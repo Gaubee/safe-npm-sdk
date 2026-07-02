@@ -1,0 +1,1089 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "npm Registry API — SDK Extensions",
+    "version": "1.0.0",
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    },
+    "description": "Vendor extensions to the official npm registry API surface that are implemented\nby the `safe-npm-sdk` on top of standard primitives (GET/PUT/DELETE against the\npackument document and its tarball attachments).\n\nThese endpoints are NOT part of the published `openapi.json`. They are documented\nhere at the same specification standard so that consumers can discover the exact\nHTTP traffic the SDK's high-level operations produce. Each operation is tagged\nwith the SDK function that drives it and notes which step of that function it\nrepresents.\n\nWhere a path reuses an existing component from `openapi.json` (a parameter,\nresponse, or security scheme), it references it by `$ref` for consistency.\n\n**Conventions specific to these extensions:**\n\n- CouchDB optimistic concurrency is expressed via a `/-rev/{rev}` path segment\n  on write operations. The `{rev}` is the packument's current `_rev`, captured\n  by a preceding `GET` and threaded through every subsequent mutation.\n- All write steps require 2FA. The one-time password is sent in the `npm-otp`\n  header; `npm-auth-type: web` and `npm-command` enable the WebAuthn flow.\n  A missing or invalid OTP yields `401`/`403` (see `responses-Unauthorized` /\n  `Forbidden`).\n"
+  },
+  "servers": [
+    {
+      "url": "https://registry.npmjs.org"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Unpublish",
+      "x-displayName": "Unpublish",
+      "description": "Low-level HTTP operations driven by `unpublishPackage()`. Removing a live\n  published version is a multi-step protocol against the CouchDB-revisioned\n  packument document:\n\n  1. `GET /{escapedPackageName}` — read the packument and its `_rev`.\n  2. `PUT /{escapedPackageName}/-rev/{rev}` — write the packument back with the\n     target version dropped from `versions`/`time` and `dist-tags.latest`\n     reassigned to the greatest remaining version.\n  3. `GET /{escapedPackageName}` — read the fresh `_rev` produced by step 2.\n  4. `DELETE /{escapedPackageName}/-/{tarball}/-rev/{rev}` — delete the tarball\n     binary attachment for the removed version.\n\n  When the removed version was the package's only version, step 4 becomes a full\n  `DELETE /{escapedPackageName}/-rev/{rev}` that removes the entire package.\n\n  The operations below are the individual steps; the SDK orchestrates them in\n  the order shown. None is meant to be called in isolation unless you are\n  reimplementing the protocol.\n"
+    },
+    {
+      "name": "Profile",
+      "x-displayName": "Profile",
+      "description": "User profile endpoints backed by `getProfile()` / `updateProfile()` / `changePassword()` / `enableTwoFactor()` / `disableTwoFactor()`. These are the two official `/−/npm/v1/user` routes from the registry profile docs, surfaced as SDK operations. Write steps require 2FA (`npm-otp`)."
+    },
+    {
+      "name": "Login",
+      "x-displayName": "Login",
+      "description": "Authentication endpoints backed by `loginCouch()` and `loginWeb()`, ported from `npm-profile`. Couch login is a CouchDB-revisioned `PUT` against `/−/user/org.couchdb.user:{username}` (with a `409 → GET ?write=true → −rev re-PUT` flow using HTTP Basic auth). Web login posts `/−/v1/login` to obtain a `(loginUrl, doneUrl)` pair, then polls the `doneUrl` (200 → token, 202 → retry, other → error). The SDK never opens a browser."
+    }
+  ],
+  "paths": {
+    "/{escapedPackageName}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/EscapedPackageName"
+        }
+      ],
+      "get": {
+        "tags": ["Unpublish"],
+        "summary": "Read packument (unpublish step 1 / 3)",
+        "operationId": "unpublish-readPackument",
+        "description": "**Used internally by `unpublishPackage()`** as steps 1 and 3. Fetches the\ncurrent packument document to obtain its CouchDB `_rev` (step 1) and again\nafter the `PUT` to obtain the freshly incremented `_rev` (step 3, needed to\nauthorize the tarball deletion).\n\nThis is a standard packument read and is identical to the registry's public\npackage document endpoint; it is restated here only to document its role in\nthe unpublish protocol. No 2FA is required to read.\n",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Packument"
+          },
+          "404": {
+            "$ref": "openapi.json#/components/responses/PackageNotFound"
+          },
+          "500": {
+            "$ref": "openapi.json#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Unpublish"],
+        "summary": "Whole-package deletion fallback (no rev)",
+        "operationId": "unpublish-deletePackageNoRev",
+        "description": "**Fallback branch inside `unpublishPackage()`.** When the package's only\nremaining version has just been removed and the post-`PUT` read could not be\nobtained (so no fresh `_rev` is known), the SDK issues a bare `DELETE\n/{escapedPackageName}` rather than `DELETE /{escapedPackageName}/-rev/{rev}`.\nThe registry rejects this without a current revision; the operation exists in\nthe spec only to document the SDK's defensive behavior.\n\nPrefer the `-rev/{rev}` form (`unpublish-deletePackage`).\n",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NpmOtp"
+          },
+          {
+            "$ref": "#/components/parameters/NpmAuthType"
+          },
+          {
+            "$ref": "#/components/parameters/NpmCommand"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "openapi.json#/components/responses/EmptySuccess"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "403": {
+            "$ref": "openapi.json#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "openapi.json#/components/responses/PackageNotFound"
+          },
+          "409": {
+            "$ref": "openapi.json#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/{escapedPackageName}/-rev/{rev}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/EscapedPackageName"
+        },
+        {
+          "$ref": "#/components/parameters/PackumentRev"
+        }
+      ],
+      "put": {
+        "tags": ["Unpublish"],
+        "summary": "Rewrite packument without the version (unpublish step 2)",
+        "operationId": "unpublish-rewritePackument",
+        "description": "**Used internally by `unpublishPackage()`** as step 2. Writes the packument\nback with the target version removed from `versions` and `time`, and with\n`dist-tags.latest` reassigned to the greatest remaining version when it\npointed at the removed version. The `{rev}` MUST be the `_rev` captured in\nstep 1; a stale revision yields `409 Conflict`.\n\nThe request body is the full modified packument (passthrough of the document\nread in step 1 with the described mutations). 2FA is mandatory.\n",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NpmOtp"
+          },
+          {
+            "$ref": "#/components/parameters/NpmAuthType"
+          },
+          {
+            "$ref": "#/components/parameters/NpmCommand"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The modified packument. The SDK passes through every field it read in step\n1 and only adjusts `versions`, `time`, and (when needed) `dist-tags.latest`.\nThe shape shown is a representative subset.\n",
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Packument"
+                  },
+                  {
+                    "type": "object",
+                    "description": "Mutations applied by unpublish step 2.",
+                    "properties": {
+                      "versions": {
+                        "type": "object",
+                        "description": "All versions except the one being unpublished.",
+                        "additionalProperties": {
+                          "type": "object"
+                        }
+                      },
+                      "time": {
+                        "type": "object",
+                        "description": "Version timestamps with the unpublished version's entry removed.",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "dist-tags": {
+                        "type": "object",
+                        "description": "Dist tags; `latest` is reassigned to the greatest remaining version when\nthe removed version previously held it.\n",
+                        "properties": {
+                          "latest": {
+                            "type": "string",
+                            "format": "semver",
+                            "description": "Greatest remaining version"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "openapi.json#/components/responses/EmptySuccess"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "403": {
+            "$ref": "openapi.json#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "openapi.json#/components/responses/PackageNotFound"
+          },
+          "409": {
+            "$ref": "openapi.json#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "openapi.json#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Unpublish"],
+        "summary": "Whole-package deletion (unpublish step 4, only-version branch)",
+        "operationId": "unpublish-deletePackage",
+        "description": "**Used internally by `unpublishPackage()`** as step 4 when the removed\nversion was the package's only version. Deletes the entire packument\ndocument. The `{rev}` MUST be the fresh `_rev` obtained from the post-`PUT`\n`GET`; a stale revision yields `409 Conflict`. 2FA is mandatory.\n",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NpmOtp"
+          },
+          {
+            "$ref": "#/components/parameters/NpmAuthType"
+          },
+          {
+            "$ref": "#/components/parameters/NpmCommand"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "openapi.json#/components/responses/EmptySuccess"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "403": {
+            "$ref": "openapi.json#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "openapi.json#/components/responses/PackageNotFound"
+          },
+          "409": {
+            "$ref": "openapi.json#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "openapi.json#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/{escapedPackageName}/-/{tarball}/-rev/{rev}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/EscapedPackageName"
+        },
+        {
+          "$ref": "#/components/parameters/TarballName"
+        },
+        {
+          "$ref": "#/components/parameters/PackumentRev"
+        }
+      ],
+      "delete": {
+        "tags": ["Unpublish"],
+        "summary": "Delete the version's tarball attachment (unpublish step 4)",
+        "operationId": "unpublish-deleteTarball",
+        "description": "**Used internally by `unpublishPackage()`** as step 4 (non-only-version\nbranch). Deletes the tarball binary attachment of the removed version. The\nattachment name `{tarball}` is derived from the removed version's\n`dist.tarball` URL (e.g. `npm-2.0.0.tgz`). The `{rev}` MUST be the fresh\n`_rev` obtained from the post-`PUT` `GET`; a stale revision yields\n`409 Conflict`. 2FA is mandatory.\n\nThe SDK skips this step entirely if no tarball path could be derived from the\npackument.\n",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NpmOtp"
+          },
+          {
+            "$ref": "#/components/parameters/NpmAuthType"
+          },
+          {
+            "$ref": "#/components/parameters/NpmCommand"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "openapi.json#/components/responses/EmptySuccess"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "403": {
+            "$ref": "openapi.json#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "openapi.json#/components/responses/PackageNotFound"
+          },
+          "409": {
+            "$ref": "openapi.json#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "openapi.json#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/-/npm/v1/user": {
+      "get": {
+        "tags": ["Profile"],
+        "summary": "Get the authenticated user's profile",
+        "operationId": "profile-getProfile",
+        "description": "`getProfile()`. Reads the authenticated user's profile document. No 2FA required.",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Profile"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "500": {
+            "$ref": "openapi.json#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Profile"],
+        "summary": "Update the authenticated user's profile",
+        "operationId": "profile-updateProfile",
+        "description": "`updateProfile()` / `changePassword()` / `enableTwoFactor()` / `disableTwoFactor()`. Posts a profile update request. Empty-string values are coerced to `null`. Enabling 2FA is a two-step flow: POST `{tfa:{mode,password}}` returns an `otpauth://` URL, then POST `{tfa:[code]}` returns recovery codes. Requires 2FA (`npm-otp`).",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NpmOtp"
+          },
+          {
+            "$ref": "#/components/parameters/NpmAuthType"
+          },
+          {
+            "$ref": "#/components/parameters/NpmCommand"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Profile"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "403": {
+            "$ref": "openapi.json#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "openapi.json#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "openapi.json#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/-/user/org.couchdb.user:{username}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Username"
+        }
+      ],
+      "get": {
+        "tags": ["Login"],
+        "summary": "Read existing user document (conflict branch, ?write=true)",
+        "operationId": "login-getUserDoc",
+        "description": "`loginCouch()` step 2a, fired after a `409` conflict. `GET …?write=true` reads the existing user document to capture its CouchDB `_rev` for the subsequent `−rev` re-PUT. Anonymous.",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "write",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["true"]
+            },
+            "description": "Set to `true`; the registry returns a fresh `_rev` for a conditional write."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CouchUserDocument"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "404": {
+            "$ref": "openapi.json#/components/responses/PackageNotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Login"],
+        "summary": "Create/login a couch user (anonymous)",
+        "operationId": "login-putUser",
+        "description": "`loginCouch()` step 1. `PUT` a fresh user document `{_id, name, password, type:'user', roles:[], date}` **anonymously** (login is how a token is obtained). On success returns the user document with a `token`. On `409` (user exists) the SDK falls through to GET + re-PUT. On `400` the user does not exist.",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouchUserDocument"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CouchUserDocument"
+          },
+          "400": {
+            "$ref": "#/components/responses/CouchUserNotFound"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "409": {
+            "$ref": "openapi.json#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/-/user/org.couchdb.user:{username}/-rev/{rev}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Username"
+        },
+        {
+          "$ref": "#/components/parameters/PackumentRev"
+        }
+      ],
+      "put": {
+        "tags": ["Login"],
+        "summary": "Re-PUT the user document at the current rev (conflict branch)",
+        "operationId": "login-putUserRev",
+        "description": "`loginCouch()` step 2b, fired after reading the existing document on a `409`. Re-PUTs the merged user document at `/-rev/{rev}` using HTTP Basic auth (`username:password`) so the registry accepts the update. The `{rev}` is the `_rev` from the preceding GET. OTP is sent when provided.",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NpmOtp"
+          },
+          {
+            "$ref": "#/components/parameters/NpmAuthType"
+          },
+          {
+            "$ref": "#/components/parameters/NpmCommand"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouchUserDocument"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CouchUserDocument"
+          },
+          "400": {
+            "$ref": "#/components/responses/CouchUserNotFound"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "409": {
+            "$ref": "openapi.json#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/-/v1/login": {
+      "post": {
+        "tags": ["Login"],
+        "summary": "Initiate a web (browser) login flow",
+        "operationId": "login-webInit",
+        "description": "`loginWeb()`. Posts an empty body to obtain a `(loginUrl, doneUrl)` pair. The caller opens `loginUrl` in a browser (the SDK never does); the SDK then polls `doneUrl` (see the `done()` handle). When the configured registry is a proxy/mirror, the canonical `registry.npmjs.org` host in `doneUrl` is rewritten to the registry origin. Anonymous.",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/WebLoginInit"
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "500": {
+            "$ref": "openapi.json#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/-/v1/done": {
+      "get": {
+        "tags": ["Login"],
+        "summary": "Poll for web login completion",
+        "operationId": "login-webDone",
+        "description": "`loginWeb().done()`. Polls the `doneUrl` returned by `/−/v1/login`. `200` with a `token` completes the flow; `202` means pending (honor `Retry-After` or the configured interval, then poll again); any other status is an error. NOTE: `doneUrl` is an absolute per-response URL (the canonical host may be rewritten to the configured registry); this path documents the standard `/−/v1/done?authId=…` shape. The SDK times out after `timeoutMs` or when the caller's `signal` aborts.",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "authId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Auth session id correlating the login with the done poll."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/WebLoginToken"
+          },
+          "202": {
+            "description": "Still pending. Honor the `Retry-After` response header (seconds) or the configured poll interval, then poll again.",
+            "headers": {
+              "retry-after": {
+                "description": "Seconds to wait before the next poll.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "openapi.json#/components/responses/responses-Unauthorized"
+          },
+          "500": {
+            "$ref": "openapi.json#/components/responses/InternalServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "npmAccessToken": {
+        "$ref": "openapi.json#/components/securitySchemes/npmAccessToken"
+      },
+      "npmSessionToken": {
+        "$ref": "openapi.json#/components/securitySchemes/npmSessionToken"
+      }
+    },
+    "responses": {
+      "Packument": {
+        "description": "The package's packument document, as read by `unpublishPackage()` step 1/3.\nThe shape is a permissive subset; the registry returns additional fields that\nthe SDK passes through verbatim on the subsequent PUT.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Packument"
+            }
+          }
+        }
+      },
+      "Profile": {
+        "description": "The authenticated user's profile document.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Profile"
+            }
+          }
+        }
+      },
+      "CouchUserDocument": {
+        "description": "A CouchDB user document. On successful login it carries a `token`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CouchUserDocument"
+            }
+          }
+        }
+      },
+      "CouchUserNotFound": {
+        "description": "Bad Request — no user exists with the given username.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              }
+            },
+            "example": {
+              "error": "Bad Request"
+            }
+          }
+        }
+      },
+      "WebLoginInit": {
+        "description": "The `(loginUrl, doneUrl)` pair that starts a web login flow.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["loginUrl", "doneUrl"],
+              "properties": {
+                "loginUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "URL the user visits in a browser."
+                },
+                "doneUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "URL the SDK polls for completion."
+                }
+              }
+            }
+          }
+        }
+      },
+      "WebLoginToken": {
+        "description": "Web login completed; the session token.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["token"],
+              "properties": {
+                "token": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Packument": {
+        "type": "object",
+        "description": "A CouchDB-revisioned packument document. The SDK reads it for `_rev`, mutates\n`versions`/`time`/`dist-tags`, and writes it back. All other fields are\npassed through unchanged.\n",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "CouchDB document id, e.g. \"npm\".",
+            "example": "demo-pkg"
+          },
+          "_rev": {
+            "type": "string",
+            "nullable": true,
+            "description": "CouchDB revision token. Required to authorize mutations via `/-rev/{rev}`.",
+            "example": "1-aaaa"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Package name."
+          },
+          "dist-tags": {
+            "type": "object",
+            "description": "Distribution tags, at minimum `latest`.",
+            "properties": {
+              "latest": {
+                "type": "string",
+                "format": "semver",
+                "description": "Version currently pointed to by `latest`."
+              }
+            },
+            "additionalProperties": {
+              "type": "string",
+              "format": "semver"
+            }
+          },
+          "versions": {
+            "type": "object",
+            "description": "Published versions, keyed by semver. Each entry is that version's\npackage.json-shaped manifest (see `PackumentVersion`).\n",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PackumentVersion"
+            }
+          },
+          "time": {
+            "type": "object",
+            "description": "ISO-8601 timestamps keyed by version, plus `created`/`modified` meta keys.",
+            "properties": {
+              "created": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "modified": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "PackumentVersion": {
+        "type": "object",
+        "description": "A single version entry within a packument. The SDK reads `dist.tarball` from\nit to derive the tarball attachment path for deletion.\n",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string",
+            "format": "semver"
+          },
+          "dist": {
+            "type": "object",
+            "properties": {
+              "tarball": {
+                "type": "string",
+                "format": "uri",
+                "description": "Absolute URL of this version's tarball, e.g.\n                https://registry.npmjs.org/demo-pkg/-/demo-pkg-1.0.0.tgz",
+                "example": "https://registry.npmjs.org/demo-pkg/-/demo-pkg-1.0.0.tgz"
+              },
+              "integrity": {
+                "type": "string",
+                "description": "sha512 integrity string"
+              },
+              "shasum": {
+                "type": "string",
+                "description": "sha1 hex digest"
+              }
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Tfa": {
+        "type": "object",
+        "description": "Polymorphic 2FA state. `null`/`false` = disabled; an `otpauth://` string = setup in progress (render as QR); a `string[]` = one-time recovery codes; `{mode,pending}` = setup pending.",
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "string",
+            "description": "An `otpauth://` URL."
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Recovery codes."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["auth-only", "auth-and-writes"]
+              },
+              "pending": {
+                "type": "boolean"
+              }
+            },
+            "required": ["mode"]
+          }
+        ]
+      },
+      "Profile": {
+        "type": "object",
+        "description": "A user's profile, as returned by GET /-/npm/v1/user.",
+        "properties": {
+          "tfa": {
+            "$ref": "#/components/schemas/Tfa"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "email_verified": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cidr_whitelist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "fullname": {
+            "type": "string",
+            "nullable": true
+          },
+          "homepage": {
+            "type": "string",
+            "nullable": true
+          },
+          "freenode": {
+            "type": "string",
+            "nullable": true
+          },
+          "twitter": {
+            "type": "string",
+            "nullable": true
+          },
+          "github": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "ProfileUpdateRequest": {
+        "type": "object",
+        "description": "A profile update request for POST /-/npm/v1/user. All fields optional; empty strings are coerced to `null`.",
+        "properties": {
+          "password": {
+            "type": "object",
+            "properties": {
+              "old": {
+                "type": "string"
+              },
+              "new": {
+                "type": "string"
+              }
+            },
+            "required": ["old", "new"]
+          },
+          "fullname": {
+            "type": "string"
+          },
+          "homepage": {
+            "type": "string"
+          },
+          "freenode": {
+            "type": "string"
+          },
+          "twitter": {
+            "type": "string"
+          },
+          "github": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "tfa": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["disable", "auth-only", "auth-and-writes"]
+                  }
+                },
+                "required": ["password", "mode"]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "A single `[code]` to confirm 2FA setup."
+              }
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "CouchUserDocument": {
+        "type": "object",
+        "description": "A CouchDB user document used by the couch login flow.",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "`org.couchdb.user:{username}`."
+          },
+          "_rev": {
+            "type": "string",
+            "description": "CouchDB revision (present on read / conflict branch)."
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "description": "Plaintext password (write only)."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["user"]
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token returned on successful login."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "parameters": {
+      "EscapedPackageName": {
+        "allOf": [
+          {
+            "$ref": "openapi.json#/components/parameters/EscapedPackageName"
+          }
+        ]
+      },
+      "PackumentRev": {
+        "name": "rev",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "A CouchDB revision token, e.g. `1-aaaa` or `2-bbbb`. Captured from a prior\n`GET /{escapedPackageName}` and threaded through every write step to express\noptimistic concurrency.\n"
+        },
+        "description": "CouchDB document revision used by the `/-rev/{rev}` path segment.",
+        "example": "2-bbbb"
+      },
+      "TarballName": {
+        "name": "tarball",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": ".+\\.tgz$"
+        },
+        "description": "Tarball attachment filename (the basename of the version's `dist.tarball`),\ne.g. `demo-pkg-1.0.0.tgz`.\n",
+        "example": "demo-pkg-1.0.0.tgz"
+      },
+      "NpmOtp": {
+        "name": "npm-otp",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^\\d{6,8}$"
+        },
+        "description": "One-time password for 2FA. Mandatory on every write step of unpublish.\nOmitting it yields `401`/`403` with a challenge — see\n`responses-Unauthorized` / `Forbidden`.\n",
+        "example": "123456"
+      },
+      "NpmAuthType": {
+        "name": "npm-auth-type",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["web"]
+        },
+        "description": "Set to `web` to engage the WebAuthn flow. Paired with `npm-command`."
+      },
+      "NpmCommand": {
+        "name": "npm-command",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "CLI command context forwarded to the registry (e.g. `token`). Used\nalongside `npm-auth-type: web` for the WebAuthn flow.\n"
+      },
+      "Username": {
+        "name": "username",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "An npm username. URL-encoded into the CouchDB user document id `org.couchdb.user:{username}`.",
+        "example": "foo"
+      }
+    }
+  },
+  "x-tagGroups": [
+    {
+      "name": "SDK Extensions",
+      "tags": ["Unpublish", "Profile", "Login"]
+    }
+  ]
+}

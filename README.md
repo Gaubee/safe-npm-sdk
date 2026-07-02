@@ -72,8 +72,8 @@ This repo uses [Vite+](https://viteplus.dev/) (`vp`) as its unified toolchain.
 vp install        # install deps
 vp check          # format + lint + type check
 vp test           # vitest + msw (no real token needed)
-vp build          # pack the SDK (js + d.ts), vp run --filter safe-npm-sdk build
-vp dev            # run the browser playground, vp dev packages/web-example
+vp run build          # pack the SDK (js + d.ts), vp run --filter safe-npm-sdk build
+vp run dev            # run the browser playground, vp dev packages/web-example
 ```
 
 ## License
