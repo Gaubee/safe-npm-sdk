@@ -141,10 +141,12 @@
       <label for="op">Choose a GET endpoint</label>
       <select id="op">
         <option value="searchPackages">searchPackages — public, no token needed</option>
+        <option value="getProfile">getProfile — your profile</option>
         <option value="listTokens">listTokens — your tokens</option>
         <option value="getPackageVisibility">getPackageVisibility — a package's visibility</option>
         <option value="getPackageCollaborators">getPackageCollaborators — a package's users</option>
         <option value="getOrgMembership">getOrgMembership — members of an org</option>
+        <option value="getOrgPackages">getOrgPackages — packages in an org</option>
         <option value="getScopeTeams">getScopeTeams — teams in an org</option>
         <option value="getTeamMembership">getTeamMembership — users in a team</option>
         <option value="getStageItems">getStageItems — your staged versions</option>
@@ -169,9 +171,11 @@
         verifyCredentials,
         searchPackages,
         listTokens,
+        getProfile,
         getPackageVisibility,
         getPackageCollaborators,
         getOrgMembership,
+        getOrgPackages,
         getScopeTeams,
         getTeamMembership,
         getStageItems,
@@ -217,10 +221,12 @@
       // Per-operation parameter fields (default values).
       const PARAMS = {
         searchPackages: [{ id: "text", label: "Search text", value: "typescript" }],
+        getProfile: [],
         listTokens: [],
         getPackageVisibility: [{ id: "pkg", label: "Package name", value: "@scope/pkg" }],
         getPackageCollaborators: [{ id: "pkg", label: "Package name", value: "@scope/pkg" }],
         getOrgMembership: [{ id: "org", label: "Org / scope name", value: "myorg" }],
+        getOrgPackages: [{ id: "org", label: "Org / scope name", value: "myorg" }],
         getScopeTeams: [{ id: "org", label: "Org / scope name", value: "myorg" }],
         getTeamMembership: [
           { id: "org", label: "Org / scope name", value: "myorg" },
@@ -383,6 +389,9 @@
             case "searchPackages":
               r = await searchPackages({ text: pv("text"), size: 10 }, client);
               break;
+            case "getProfile":
+              r = await getProfile(client);
+              break;
             case "listTokens":
               r = await listTokens(client);
               break;
@@ -394,6 +403,9 @@
               break;
             case "getOrgMembership":
               r = await getOrgMembership(pv("org"), client);
+              break;
+            case "getOrgPackages":
+              r = await getOrgPackages(pv("org"), client);
               break;
             case "getScopeTeams":
               r = await getScopeTeams(pv("org"), client);
