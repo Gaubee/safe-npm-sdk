@@ -84,6 +84,20 @@ export {
   getStagePackageTarball,
 } from "./operations/stage";
 
+// Operations — Profile
+export {
+  getProfile,
+  updateProfile,
+  changePassword,
+  enableTwoFactor,
+  disableTwoFactor,
+} from "./operations/profile";
+export type { EnableTwoFactorOptions } from "./operations/profile";
+
+// Operations — Login
+export { loginCouch, loginWeb } from "./operations/login";
+export type { WebLoginHandle } from "./operations/login";
+
 // Schemas (zod) + inferred types
 export * from "./schemas/common";
 export * from "./schemas/tokens";
@@ -95,3 +109,4 @@ export * from "./schemas/audit";
 export * from "./schemas/oidc";
 export * from "./schemas/trust";
 export * from "./schemas/stage";
+export * from "./schemas/profile";
