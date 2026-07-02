@@ -54,9 +54,12 @@ describe("verifyCredentials", () => {
   it("reports OTP invalid when the phantom delete returns 401 (OTP gate rejected)", async () => {
     server.use(
       reg.get("/-/npm/v1/tokens", () => HttpResponse.json({ objects: [] })),
-      // OTP wrong → registry rejects at the gate → 401
+      // OTP wrong → registry rejects at the gate → 401 with an OTP challenge.
       reg.delete("/-/npm/v1/tokens/token/:token", () =>
-        HttpResponse.json({ error: "OTP required" }, { status: 401 }),
+        HttpResponse.json(
+          { error: "OTP required" },
+          { status: 401, headers: { "www-authenticate": "OTP" } },
+        ),
       ),
     );
     const r = await verifyCredentials(makeClient(), { otp: "wrong" });
@@ -65,6 +68,42 @@ describe("verifyCredentials", () => {
       expect(r.data.authValid).toBe(true);
       expect(r.data.otpValid).toBe(false);
       expect(r.data.requires2FA).toBe(true);
+    }
+  });
+
+  it("reports OTP invalid when the phantom delete returns a /one-time pass/ 401 (heuristic)", async () => {
+    server.use(
+      reg.get("/-/npm/v1/tokens", () => HttpResponse.json({ objects: [] })),
+      // Malformed OTP rejection: no www-authenticate header, but the body
+      // mentions "one-time pass" — the classifier should still yield EOTP.
+      reg.delete("/-/npm/v1/tokens/token/:token", () =>
+        HttpResponse.text("A one-time pass is required.", { status: 401 }),
+      ),
+    );
+    const r = await verifyCredentials(makeClient(), { otp: "wrong" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.otpValid).toBe(false);
+      expect(r.data.requires2FA).toBe(true);
+    }
+  });
+
+  it("reports IP-blocked distinctly (EAUTHIP) instead of mislabeling as OTP invalid", async () => {
+    server.use(
+      reg.get("/-/npm/v1/tokens", () => HttpResponse.json({ objects: [] })),
+      reg.delete("/-/npm/v1/tokens/token/:token", () =>
+        HttpResponse.json(
+          { error: "Login is not allowed" },
+          { status: 401, headers: { "www-authenticate": "ipaddress" } },
+        ),
+      ),
+    );
+    const r = await verifyCredentials(makeClient(), { otp: "123456" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      // IP block is NOT an OTP failure: otpValid stays null, message mentions IP.
+      expect(r.data.otpValid).toBeNull();
+      expect(r.data.message).toContain("IP");
     }
   });
 
