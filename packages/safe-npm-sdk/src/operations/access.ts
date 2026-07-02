@@ -22,7 +22,7 @@ import { VoidSchema } from "../schemas/common";
  */
 export async function getTeamPackageGrants(
   params: { org: string; team: string },
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<PackageAccessLevels>> {
   const c = resolveClient(client);
   return c.request({
@@ -40,7 +40,7 @@ export async function getTeamPackageGrants(
 export async function createTeamPackageGrant(
   params: { org: string; team: string },
   input: GrantTeamPackageInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<PackageAccessLevels>> {
   const c = resolveClient(client);
   const body = GrantTeamPackageInputSchema.parse(input);
@@ -59,7 +59,7 @@ export async function createTeamPackageGrant(
  */
 export async function deleteTeamPackageGrant(
   params: { org: string; team: string; package: string },
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   return c.request({
@@ -77,7 +77,7 @@ export async function deleteTeamPackageGrant(
  */
 export async function getOrgPackages(
   org: string,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<PackageAccessLevels>> {
   const c = resolveClient(client);
   return c.request({
@@ -94,7 +94,7 @@ export async function getOrgPackages(
  */
 export async function getPackageCollaborators(
   pkg: string,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<UserAccessLevels>> {
   const c = resolveClient(client);
   return c.request({
@@ -111,7 +111,7 @@ export async function getPackageCollaborators(
  */
 export async function getPackageVisibility(
   pkg: string,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<PackageVisibilityMap>> {
   const c = resolveClient(client);
   return c.request({
@@ -129,7 +129,7 @@ export async function getPackageVisibility(
 export async function setPackageAccess(
   pkg: string,
   input: SetPackageAccessInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<PackageAccessLevels>> {
   const c = resolveClient(client);
   const body = SetPackageAccessInputSchema.parse(input);

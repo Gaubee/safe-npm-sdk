@@ -33,7 +33,7 @@ import {
  */
 export async function getOrgMembership(
   org: string,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<OrgMembers>> {
   const c = resolveClient(client);
   return c.request({
@@ -51,7 +51,7 @@ export async function getOrgMembership(
 export async function changeOrgMembership(
   org: string,
   input: ChangeOrgMembershipInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<OrgInvite>> {
   const c = resolveClient(client);
   const body = ChangeOrgMembershipInputSchema.parse(input);
@@ -71,7 +71,7 @@ export async function changeOrgMembership(
 export async function deleteOrgMembership(
   org: string,
   input: RemoveOrgMemberInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   const body = RemoveOrgMemberInputSchema.parse(input);
@@ -88,10 +88,7 @@ export async function deleteOrgMembership(
  *
  * `GET /-/org/{orgName}/team`
  */
-export async function getScopeTeams(
-  org: string,
-  client?: NpmClient | null,
-): Promise<Result<OrgTeams>> {
+export async function getScopeTeams(org: string, client?: NpmClient): Promise<Result<OrgTeams>> {
   const c = resolveClient(client);
   return c.request({
     method: "GET",
@@ -112,7 +109,7 @@ export async function getScopeTeams(
 export async function createTeam(
   org: string,
   input: CreateTeamInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<CreateTeamResponse>> {
   const c = resolveClient(client);
   const body = CreateTeamInputSchema.parse(input);
@@ -131,7 +128,7 @@ export async function createTeam(
  */
 export async function deleteTeam(
   params: { org: string; team: string },
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   return c.request({
@@ -148,7 +145,7 @@ export async function deleteTeam(
  */
 export async function getTeamMembership(
   params: { org: string; team: string },
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<TeamUsers>> {
   const c = resolveClient(client);
   return c.request({
@@ -166,7 +163,7 @@ export async function getTeamMembership(
 export async function createTeamMembership(
   params: { org: string; team: string },
   input: TeamMemberInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   const body = TeamMemberInputSchema.parse(input);
@@ -186,7 +183,7 @@ export async function createTeamMembership(
 export async function deleteTeamMembership(
   params: { org: string; team: string },
   input: TeamMemberInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   const body = TeamMemberInputSchema.parse(input);

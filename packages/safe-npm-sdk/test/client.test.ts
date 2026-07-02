@@ -252,8 +252,11 @@ describe("request engine: notice & errors", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.status).toBe(401);
-      // message starts with the body message, then appends the request line.
-      expect(r.error.message.startsWith("Unauthorized")).toBe(true);
+      // The error is classified as a general HTTP error (no www-authenticate
+      // challenge): npm-registry-fetch-style "401 - METHOD url - <detail>".
+      expect(r.error.code).toBe("E401");
+      // message includes the body detail and the request line.
+      expect(r.error.message).toContain("Unauthorized");
       expect(r.error.message).toContain("GET ");
       expect(r.error.message).toContain("/-/npm/v1/tokens");
       // no token leak in the message
@@ -340,6 +343,36 @@ describe("global default client", () => {
     const explicit = makeClient();
     setDefaultClient(global);
     expect(resolveClient(explicit)).toBe(explicit);
+  });
+
+  // --- null vs undefined convention (see CONTRIBUTING / docs) ---
+  //   client = undefined → use the global default (or throw if none)
+  //   client = null      → an anonymous client (no Authorization header)
+  it("resolveClient(null) returns an anonymous client (no auth), even with a default set", () => {
+    const global = makeClient(); // carries a token
+    setDefaultClient(global);
+    const anon = resolveClient(null);
+    // anonymous client has no auth credentials
+    expect(anon.auth).toBeUndefined();
+    // and is a distinct object from the token-bearing default
+    expect(anon).not.toBe(global);
+  });
+
+  it("resolveClient(null) caches a single anonymous client", () => {
+    expect(resolveClient(null)).toBe(resolveClient(null));
+  });
+
+  it("the anonymous client makes requests with no Authorization header", async () => {
+    let authHeader: string | null | undefined;
+    server.use(
+      reg.get("/-/v1/search", ({ request }) => {
+        authHeader = request.headers.get("authorization");
+        return HttpResponse.json({ objects: [] });
+      }),
+    );
+    const anon = resolveClient(null);
+    await anon.request({ method: "GET", path: "/-/v1/search", schema: z.unknown() });
+    expect(authHeader).toBeNull();
   });
 });
 

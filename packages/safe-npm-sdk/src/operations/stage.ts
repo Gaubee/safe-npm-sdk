@@ -26,7 +26,7 @@ export type { OtpOptions };
  */
 export async function getStageItems(
   input: StageListInput = {},
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<StagePackageList>> {
   const c = resolveClient(client);
   return c.request({
@@ -49,7 +49,7 @@ export async function getStageItems(
 export async function stagePackageVersion(
   packageName: string,
   packument: StagedPackumentRequest,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<StagePackageVersionResponse>> {
   const c = resolveClient(client);
   const body = StagedPackumentRequestSchema.parse(packument);
@@ -68,7 +68,7 @@ export async function stagePackageVersion(
  */
 export async function getStagePackageVersion(
   stageId: string,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<StagePackageVersion>> {
   const c = resolveClient(client);
   return c.request({
@@ -86,7 +86,7 @@ export async function getStagePackageVersion(
 export async function deleteStagePackageVersion(
   stageId: string,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   return c.request({
@@ -110,7 +110,7 @@ export async function deleteStagePackageVersion(
 export async function approveStagePackageVersion(
   stageId: string,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<ApproveStageResponse>> {
   const c = resolveClient(client);
   return c.request({
@@ -133,7 +133,7 @@ export async function approveStagePackageVersion(
  */
 export async function getStagePackageTarball(
   stageId: string,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   return c.request({

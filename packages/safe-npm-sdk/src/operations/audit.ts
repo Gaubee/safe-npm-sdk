@@ -17,7 +17,7 @@ import {
  */
 export async function bulkAudit(
   input: BulkAuditInput,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<BulkAuditResponse>> {
   const c = resolveClient(client);
   const body = BulkAuditInputSchema.parse(input);

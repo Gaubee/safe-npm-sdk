@@ -13,11 +13,14 @@ import {
 /** Options shared by operations that require 2FA. */
 export interface OtpOptions {
   /**
-   * One-time password for two-factor authentication. Pass the code to send it,
-   * or `null` to explicitly skip it (when you're certain 2FA isn't required).
-   * Not optional — npm write operations generally require 2FA.
+   * One-time password for two-factor authentication. Follows the SDK's
+   * `null`-vs-`undefined` convention:
+   * - a `string` → send it as the `npm-otp` header.
+   * - `null` → explicitly skip the OTP (you're certain 2FA isn't required).
+   * - `undefined` (omitted) → let the endpoint's default apply; the registry
+   *   will prompt with an `EOTP` challenge if 2FA is required and none is sent.
    */
-  otp: string | null;
+  otp?: string | null;
   /** Authentication type. `"web"` enables the browser-based WebAuthn flow. */
   authType?: "web";
   /** Command context, e.g. `"token"`. */
@@ -29,7 +32,7 @@ export interface OtpOptions {
  *
  * `GET /-/npm/v1/tokens`
  */
-export async function listTokens(client?: NpmClient | null): Promise<Result<TokenList>> {
+export async function listTokens(client?: NpmClient): Promise<Result<TokenList>> {
   const c = resolveClient(client);
   return c.request({
     method: "GET",
@@ -49,7 +52,7 @@ export async function listTokens(client?: NpmClient | null): Promise<Result<Toke
 export async function createToken(
   input: CreateTokenInput,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<Token>> {
   const c = resolveClient(client);
   const body = CreateTokenInputSchema.parse(input);
@@ -74,7 +77,7 @@ export async function createToken(
 export async function deleteToken(
   token: string,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   return c.request({

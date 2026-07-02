@@ -1,5 +1,11 @@
 import type { ZodType } from "zod";
-import { NpmApiError } from "./error";
+import {
+  NpmApiError,
+  NpmApiErrorAuthIPAddress,
+  NpmApiErrorAuthOTP,
+  NpmApiErrorAuthUnknown,
+  NpmApiErrorGeneral,
+} from "./error";
 import { type Result, err, ok } from "./result";
 
 /** Authentication credentials. Omit for an anonymous client (no auth header). */
@@ -31,9 +37,16 @@ export interface RequestOptions {
   /** Zod schema used to validate the parsed JSON response body. */
   schema: ZodType<unknown>;
   /** OTP for 2FA. A string is sent as the `npm-otp` header; `null`/`undefined` are not. */
-  otp?: string | null;
+  otp?: string | null | undefined;
   /** Extra npm headers (npm-auth-type, npm-command, ...). */
   extraHeaders?: Record<string, string>;
+  /**
+   * Per-request HTTP Basic-auth override (mirrors npm-registry-fetch's
+   * `forceAuth.username`/`password`). When set, it takes precedence over the
+   * client's bearer token and builds `Authorization: Basic <base64(user:pass)>`.
+   * Used by couch login's `-rev` re-PUT.
+   */
+  basic?: { username: string; password: string };
 }
 
 /** An npm registry client (optionally anonymous). */
@@ -111,16 +124,6 @@ async function parseBody(res: Response): Promise<unknown> {
   }
 }
 
-function extractMessage(body: unknown, fallback: string): string {
-  if (typeof body === "string" && body.length > 0) return body;
-  if (body && typeof body === "object") {
-    const b = body as Record<string, unknown>;
-    if (typeof b.message === "string" && b.message.length > 0) return b.message;
-    if (typeof b.error === "string" && b.error.length > 0) return b.error;
-  }
-  return fallback;
-}
-
 // Keys whose values must never appear in logs (credentials / secrets).
 // Substrings that mark a key as sensitive, matched case-insensitively and
 // treating `-`/`_` as equivalent (e.g. npm-otp, npm_otp, access_token).
@@ -192,11 +195,19 @@ async function doRequest(
 ): Promise<Result<unknown>> {
   const url = buildUrl(client.registry, opts.path, opts.query);
 
-  // Inject Authorization only when the client carries credentials. An anonymous
-  // client (auth omitted) skips the header entirely (e.g. public search).
+  // Inject Authorization. A per-request `basic` override (mirrors
+  // npm-registry-fetch's forceAuth.username/password) takes precedence over the
+  // client's bearer token; otherwise the client token is used when present. An
+  // anonymous client with no override skips the header entirely (e.g. login,
+  // public search).
   const tok = authToken(client.auth);
   const headers = new Headers({ Accept: "application/json", ...opts.extraHeaders });
-  if (tok !== undefined) headers.set("Authorization", `Bearer ${tok}`);
+  if (opts.basic) {
+    headers.set("Authorization", `Basic ${basicBase64(opts.basic.username, opts.basic.password)}`);
+  } else if (tok !== undefined) {
+    headers.set("Authorization", `Bearer ${tok}`);
+  }
+  const hasAuth = opts.basic !== undefined || tok !== undefined;
   // OTP: only a real (non-null) string is sent as the npm-otp header.
   if (typeof opts.otp === "string") headers.set("npm-otp", opts.otp);
   const hasBody = opts.body !== undefined;
@@ -228,7 +239,7 @@ async function doRequest(
       }
       const error = new NpmApiError({
         status: 0,
-        message: `network error: ${e instanceof Error ? e.message : "unknown"} [${describeRequest(opts.method, url, opts.body, { hasAuth: tok !== undefined, otp: opts.otp })}]`,
+        message: `network error: ${e instanceof Error ? e.message : "unknown"} [${describeRequest(opts.method, url, opts.body, { hasAuth, otp: opts.otp })}]`,
         body: undefined,
         headers: new Headers(),
         request: reqMeta,
@@ -250,12 +261,16 @@ async function doRequest(
         await delay(backoffMs(attempt));
         continue;
       }
-      const error = new NpmApiError({
+      const error = classifyError({
         status: res.status,
-        message: `${extractMessage(body, `request failed with status ${res.status}`)} [${describeRequest(opts.method, url, opts.body, { hasAuth: tok !== undefined, otp: opts.otp })}]`,
+        method: opts.method,
+        url: `${url.origin}${url.pathname}`,
         body,
         headers: res.headers,
         request: reqMeta,
+        // Append the redacted request description so failures stay debuggable,
+        // as the legacy base NpmApiError did.
+        suffix: ` [${describeRequest(opts.method, url, opts.body, { hasAuth, otp: opts.otp })}]`,
       });
       return err(error, { status: res.status, headers: res.headers, body });
     }
@@ -268,7 +283,7 @@ async function doRequest(
         .join("; ");
       const error = new NpmApiError({
         status: res.status,
-        message: `response schema validation failed: ${issues} [${describeRequest(opts.method, url, opts.body, { hasAuth: tok !== undefined, otp: opts.otp })}]`,
+        message: `response schema validation failed: ${issues} [${describeRequest(opts.method, url, opts.body, { hasAuth, otp: opts.otp })}]`,
         body,
         headers: res.headers,
         request: reqMeta,
@@ -287,6 +302,76 @@ function backoffMs(attempt: number): number {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Pick the right {@link NpmApiError} subclass for a `>= 400` response, porting
+ * `npm-registry-fetch/lib/check-response.js#checkErrors`:
+ *
+ * - 401 + `www-authenticate: otp` (or a body mentioning "one-time pass") →
+ *   {@link NpmApiErrorAuthOTP} (`EOTP`).
+ * - 401 + `www-authenticate: ipaddress` → {@link NpmApiErrorAuthIPAddress}
+ *   (`EAUTHIP`).
+ * - 401 + any other `www-authenticate` challenge →
+ *   {@link NpmApiErrorAuthUnknown} (`E401`).
+ * - everything else → {@link NpmApiErrorGeneral} (`E<status>`).
+ *
+ * `suffix` is appended to the message (the redacted request description) so the
+ * auth-specific subclasses keep the debuggability of the legacy base error.
+ */
+function classifyError(args: {
+  status: number;
+  method: string;
+  url: string;
+  body: unknown;
+  headers: Headers;
+  request?: { method: string; path: string };
+  suffix?: string;
+}): NpmApiError {
+  const { status, method, url, body, headers, request, suffix = "" } = args;
+  const challenge = headers.get("www-authenticate");
+  const challengeLower = challenge ? challenge.split(/,\s*/).map((s) => s.toLowerCase()) : [];
+
+  let error: NpmApiError;
+  if (status === 401 && challengeLower.includes("otp")) {
+    error = new NpmApiErrorAuthOTP({ status, body, headers, request });
+  } else if (status === 401 && challengeLower.includes("ipaddress")) {
+    error = new NpmApiErrorAuthIPAddress({ status, body, headers, request });
+  } else if (status === 401 && challenge) {
+    error = new NpmApiErrorAuthUnknown({ status, body, headers, request });
+  } else if (status === 401 && typeof body === "string" && /one-time pass/.test(body)) {
+    // Heuristic for malformed OTP responses without www-authenticate.
+    error = new NpmApiErrorAuthOTP({ status, body, headers, request });
+  } else {
+    error = new NpmApiErrorGeneral({
+      status,
+      method,
+      url,
+      body,
+      headers,
+      request,
+    });
+  }
+  // The subclasses build npm-registry-fetch-style messages without the redacted
+  // request description; append it directly so all errors are equally
+  // debuggable without losing the subclass identity.
+  if (suffix) (error as Error).message += suffix;
+  return error;
+}
+
+/**
+ * Cross-platform UTF-8-safe Base64 encoder for HTTP Basic auth. Avoids
+ * `Buffer`/`btoa` so the SDK stays browser-friendly (consistent with the
+ * Web Crypto migration). Encodes each char to its UTF-8 byte sequence, then
+ * to Base64 via `btoa` over a binary string.
+ */
+function basicBase64(username: string, password: string): string {
+  const credentials = `${username}:${password}`;
+  // UTF-8 encode → binary string → btoa.
+  const bytes = new TextEncoder().encode(credentials);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,10 +396,32 @@ export function setDefaultClient(client: NpmClient | null): void {
 }
 
 /**
- * Resolve a client argument: use the provided one, else the global default.
- * Throws a clear error if neither is available.
+ * Resolve a client argument. The argument's type encodes what the operation
+ * allows, and the runtime honors each case explicitly (this is the SDK's
+ * `null`-vs-`undefined` convention — see the contributing docs):
+ *
+ * - `undefined` (omitted) → use the {@link getDefaultClient global default}.
+ *   Throws if none is set.
+ * - a client → use it as-is.
+ * - `null` → an **anonymous** client (no `Authorization` header, public
+ *   registry). Only accepted by operations that permit anonymous access —
+ *   those declare `client?: NpmClient | null`, the rest declare
+ *   `client?: NpmClient` and reject `null` at the type level.
+ *
+ * @example
+ * ```ts
+ * searchPackages({}, null);        // anonymous (public search)
+ * listTokens();                    // uses the global default client
+ * listTokens(myClient);            // uses the given client
+ * ```
  */
+// Overload 1: non-nullable — for operations that require authentication.
+export function resolveClient(client?: NpmClient): NpmClient;
+// Overload 2: nullable — for operations that permit anonymous access.
+export function resolveClient(client?: NpmClient | null): NpmClient;
 export function resolveClient(client?: NpmClient | null): NpmClient {
+  // `null` is an explicit request for an anonymous client (no token).
+  if (client === null) return getAnonymousClient();
   const resolved = client ?? defaultClient;
   if (!resolved) {
     throw new Error(
@@ -322,4 +429,12 @@ export function resolveClient(client?: NpmClient | null): NpmClient {
     );
   }
   return resolved;
+}
+
+// A lazily-built anonymous client reused across calls (no auth header, public
+// registry, the configured global fetch). Built once and cached.
+let anonymousClient: NpmClient | null = null;
+function getAnonymousClient(): NpmClient {
+  if (!anonymousClient) anonymousClient = createClient({});
+  return anonymousClient;
 }

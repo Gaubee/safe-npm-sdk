@@ -28,7 +28,7 @@ export async function publish(
   pkg: string,
   packument: PublishPackument,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<PublishSuccess>> {
   const c = resolveClient(client);
   const body = PublishPackumentSchema.parse(packument);

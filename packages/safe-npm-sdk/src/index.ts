@@ -1,7 +1,13 @@
 // Core
 export { createClient, getDefaultClient, setDefaultClient, resolveClient } from "./client";
 export type { Auth, ClientOptions, NpmClient, RequestOptions } from "./client";
-export { NpmApiError } from "./error";
+export {
+  NpmApiError,
+  NpmApiErrorGeneral,
+  NpmApiErrorAuthOTP,
+  NpmApiErrorAuthIPAddress,
+  NpmApiErrorAuthUnknown,
+} from "./error";
 export { ok, err } from "./result";
 export type { ApiResponse, Result, OkResult, ErrResult } from "./result";
 export { escapePackageName } from "./encode";

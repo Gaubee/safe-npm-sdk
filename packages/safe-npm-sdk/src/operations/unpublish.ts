@@ -56,7 +56,7 @@ export async function unpublishPackage(
   pkg: string,
   version: string,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<UnpublishResult>> {
   const c = resolveClient(client);
   const esc = escapePackageName(pkg);

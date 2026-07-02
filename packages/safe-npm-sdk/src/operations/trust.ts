@@ -22,7 +22,7 @@ export type { OtpOptions };
 export async function getTrustedPublishers(
   pkg: string,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<TrustedPublisherConfigs>> {
   const c = resolveClient(client);
   return c.request({
@@ -48,7 +48,7 @@ export async function configureTrustedPublisher(
   pkg: string,
   config: TrustedPublisherConfigCreate,
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<TrustedPublisherConfigs>> {
   const c = resolveClient(client);
   const parsed = TrustedPublisherConfigCreateSchema.parse(config);
@@ -76,7 +76,7 @@ export async function configureTrustedPublisher(
 export async function deleteTrustedPublisher(
   params: { package: string; configUuid: string },
   opts: OtpOptions,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<unknown>> {
   const c = resolveClient(client);
   return c.request({

@@ -15,7 +15,7 @@ import { type OidcTokenExchangeResponse, OidcTokenExchangeResponseSchema } from 
  */
 export async function exchangeOidcToken(
   packageName: string,
-  client?: NpmClient | null,
+  client?: NpmClient,
 ): Promise<Result<OidcTokenExchangeResponse>> {
   const c = resolveClient(client);
   return c.request({
