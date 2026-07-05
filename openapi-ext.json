@@ -23,7 +23,7 @@
     {
       "name": "Profile",
       "x-displayName": "Profile",
-      "description": "User profile endpoints backed by `getProfile()` / `updateProfile()` / `changePassword()` / `enableTwoFactor()` / `disableTwoFactor()`. These are the two official `/−/npm/v1/user` routes from the registry profile docs, surfaced as SDK operations. Write steps require 2FA (`npm-otp`)."
+      "description": "User profile endpoints backed by `getProfile()` / `updateProfile()` / `changePassword()` / `enableTwoFactor()` / `disableTwoFactor()`, plus `lookupAvatar()` — a best-effort avatar resolver that chains several GETs.\n\nThe two official `/−/npm/v1/user` routes come from the registry profile docs; write steps require 2FA (`npm-otp`).\n\n`lookupAvatar()` resolves a username's avatar by trying, in order: the authenticated profile's email → a verified Gravatar URL; the registry user documents `GET /−/user/{username}` and `GET /−/user/org.couchdb.user:{username}` (reading an `avatar` field); and a registry maintainer search (`maintainer:{username}`) whose matching publisher/maintainer email is verified against Gravatar. The first hit wins and is tagged with its source (`authenticated-profile` / `registry-profile` / `maintainer-gravatar` / `none`). Avatar resolution never throws — a total miss yields `{ avatarUrl: null, source: \"none\" }`. The Gravatar verification (`HEAD https://gravatar.com/avatar/{sha256}?s=128&d=404`) is an external HTTP call outside the registry; it uses SHA-256 of the email via Web Crypto and returns `null` on any non-2xx or failed response."
     },
     {
       "name": "Login",
@@ -389,6 +389,59 @@
         }
       }
     },
+    "/-/user/{username}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Username"
+        }
+      ],
+      "get": {
+        "tags": ["Profile"],
+        "summary": "Read a registry user document by username (lookupAvatar registry-profile link)",
+        "operationId": "profile-getUserDoc",
+        "description": "**Used internally by `lookupAvatar()`** as the first registry user-document\nprobe (the bare-username id shape). Reads an `avatar`/`avatarUrl`/\n`avatar_url` field; an absent or blank field falls through to the\n`org.couchdb.user:`-prefixed shape, then to the maintainer-search link.\nAnonymous — npm no longer reliably exposes an avatar here, so this step\nfrequently misses and the resolver continues down the fallback chain.\n\nNo 2FA is required to read.\n",
+        "security": [
+          {
+            "npmAccessToken": []
+          },
+          {
+            "npmSessionToken": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "A permissive JSON object; the SDK only reads an avatar field from it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "avatar": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Legacy npm avatar path (e.g. `/avatar/{md5}`) or absolute URL."
+                    },
+                    "avatarUrl": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "avatar_url": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "openapi.json#/components/responses/PackageNotFound"
+          }
+        }
+      }
+    },
     "/-/user/org.couchdb.user:{username}": {
       "parameters": [
         {
@@ -396,10 +449,10 @@
         }
       ],
       "get": {
-        "tags": ["Login"],
-        "summary": "Read existing user document (conflict branch, ?write=true)",
+        "tags": ["Login", "Profile"],
+        "summary": "Read existing user document (conflict branch, ?write=true / lookupAvatar link)",
         "operationId": "login-getUserDoc",
-        "description": "`loginCouch()` step 2a, fired after a `409` conflict. `GET …?write=true` reads the existing user document to capture its CouchDB `_rev` for the subsequent `−rev` re-PUT. Anonymous.",
+        "description": "Two roles:\n\n- `loginCouch()` step 2a, fired after a `409` conflict. `GET …?write=true` reads the existing user document to capture its CouchDB `_rev` for the subsequent `−rev` re-PUT. Anonymous.\n- `lookupAvatar()` registry-profile link (second id shape tried). Reads an `avatar`/`avatarUrl`/`avatar_url` field; an absent or blank field falls through to the next fallback. Anonymous.",
         "security": [
           {
             "npmAccessToken": []

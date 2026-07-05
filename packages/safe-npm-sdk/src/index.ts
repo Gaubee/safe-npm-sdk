@@ -91,8 +91,9 @@ export {
   changePassword,
   enableTwoFactor,
   disableTwoFactor,
+  lookupAvatar,
 } from "./operations/profile";
-export type { EnableTwoFactorOptions } from "./operations/profile";
+export type { EnableTwoFactorOptions, AvatarSource, AvatarLookup } from "./operations/profile";
 
 // Operations — Login
 export { loginCouch, loginWeb } from "./operations/login";

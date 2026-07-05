@@ -186,6 +186,42 @@ if (!r.ok) {
 }
 ```
 
+## Resolving avatars
+
+NPM no longer exposes a reliable anonymous avatar endpoint. `lookupAvatar`
+walks a fallback chain and returns the first hit, tagged with its source so
+you can decide how much to trust it:
+
+```ts
+import { lookupAvatar } from "safe-npm-sdk";
+
+const r = await lookupAvatar("gaubee", client); // client optional; null → anonymous
+if (r.ok && r.data.avatarUrl) {
+  console.log(r.data.avatarUrl, "via", r.data.source);
+}
+```
+
+| Source                  | How it resolved                                                             |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `authenticated-profile` | The authenticated profile's `email` → verified Gravatar URL.                |
+| `registry-profile`      | An `avatar` field on `/-/user/{name}` (or the `org.couchdb.user:` form).    |
+| `maintainer-gravatar`   | A registry `maintainer:{name}` search → matching email → verified Gravatar. |
+| `none`                  | Every link missed; `avatarUrl` is `null`.                                   |
+
+A few notes:
+
+- **Best-effort, never throws.** A total miss returns `ok({ avatarUrl: null,
+source: "none" })`, not an error. Only an unresolvable client (none passed,
+  no default set) yields `err`.
+- **Anonymous-friendly.** `client?: NpmClient | null`. With `null` (or an
+  anonymous client) the authenticated-profile link is skipped.
+- **Gravatar via SHA-256 + Web Crypto**, not MD5 — so there are zero Node-only
+  imports (the legacy `/avatar/{md5}` paths npm still emits are rewritten to a
+  Gravatar URL directly from that hash). The Gravatar verification is an
+  external `HEAD` request with `?d=404`, so unverified users return `null`.
+- **No caching.** The SDK resolves the URL only; cache the `avatarUrl` and
+  download the image on your side.
+
 ## Endpoint coverage
 
 Most registry operations in the SDK map 1:1 to an operation in the OpenAPI
@@ -208,7 +244,7 @@ and are documented in `openapi-ext.json`. The table below is generated from
 | **Publish**    | `publish`                                                                                                                                                                          |
 | **Search**     | `searchPackages`                                                                                                                                                                   |
 | **Stage**      | `getStageItems`, `stagePackageVersion`, `getStagePackageVersion`, `deleteStagePackageVersion`, `approveStagePackageVersion`, `getStagePackageTarball`                              |
-| **Profile**    | `getProfile`, `updateProfile`, `changePassword`, `enableTwoFactor`, `disableTwoFactor`                                                                                             |
+| **Profile**    | `getProfile`, `updateProfile`, `changePassword`, `enableTwoFactor`, `disableTwoFactor`, `lookupAvatar`                                                                             |
 | **Login**      | `loginCouch`, `loginWeb`                                                                                                                                                           |
 
 <!-- END ENDPOINTS -->
@@ -239,7 +275,7 @@ all run through `vp`.
 ```bash
 vp install         # install workspace dependencies
 vp check           # format + lint + type check (prefer this loop)
-vp test            # vitest + msw (59 tests, no real token needed)
+vp test            # vitest + msw (120 tests, no real token needed)
 vp run --filter safe-npm-sdk build   # pack → dist/index.mjs + dist/index.d.mts
 ```
 

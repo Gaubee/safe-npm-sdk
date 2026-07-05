@@ -1,14 +1,31 @@
+import { http } from "msw";
 import { describe, expect, it } from "vite-plus/test";
 import {
   changePassword,
   disableTwoFactor,
   enableTwoFactor,
   getProfile,
+  lookupAvatar,
   updateProfile,
 } from "../src/operations/profile";
 import { HttpResponse, makeClient, reg, startServer } from "./helpers";
 
 const server = startServer();
+
+/**
+ * SHA-256 Gravatar hash of "me@example.com" (lowercased+trimmed), computed the
+ * same way `gravatarUrlFromEmail` does. Used to assert the generated URL.
+ */
+const EMAIL_HASH = "8c2a47d3bdb8d3096a6479f53eac3b724291db5f1c31611100f675be5537329d";
+const GRAVATAR_URL = `https://gravatar.com/avatar/${EMAIL_HASH}?s=128&d=404`;
+
+/** An MSW handler answering the Gravatar HEAD probe with a given status. */
+function gravatarHead(status: number) {
+  return http.head(
+    `https://gravatar.com/avatar/${EMAIL_HASH}`,
+    () => new HttpResponse(null, { status }),
+  );
+}
 
 const BASE_PROFILE = {
   tfa: null,
@@ -172,5 +189,159 @@ describe("disableTwoFactor", () => {
     const r = await disableTwoFactor("pw", { otp: "222222" }, makeClient());
     expect(r.ok).toBe(true);
     expect(received).toEqual({ tfa: { mode: "disable", password: "pw" } });
+  });
+});
+
+describe("lookupAvatar", () => {
+  it("resolves via the authenticated profile's email → Gravatar (source: authenticated-profile)", async () => {
+    const order: string[] = [];
+    server.use(
+      reg.get("/-/npm/v1/user", () => {
+        order.push("profile");
+        return HttpResponse.json(BASE_PROFILE);
+      }),
+      // Registry user docs should NOT be hit once the profile link resolves.
+      reg.get("/-/user/:name", () => {
+        order.push("user-doc");
+        return HttpResponse.json({});
+      }),
+      gravatarHead(200),
+    );
+    const r = await lookupAvatar("gaubee", makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.avatarUrl).toBe(GRAVATAR_URL);
+      expect(r.data.source).toBe("authenticated-profile");
+      expect(r.data.username).toBe("gaubee");
+    }
+    expect(order).toEqual(["profile"]);
+  });
+
+  it("falls through to the registry user doc when the profile has no verifiable Gravatar", async () => {
+    server.use(
+      reg.get("/-/npm/v1/user", () => HttpResponse.json({ ...BASE_PROFILE, email: null })),
+      reg.get("/-/user/gaubee", () => HttpResponse.json({})),
+      // The org.couchdb.user-prefixed shape carries the avatar field.
+      reg.get("/-/user/org.couchdb.user:gaubee", () =>
+        HttpResponse.json({ avatar: "https://example.com/a.png" }),
+      ),
+    );
+    const r = await lookupAvatar("gaubee", makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.avatarUrl).toBe("https://example.com/a.png");
+      expect(r.data.source).toBe("registry-profile");
+    }
+  });
+
+  it("rewrites a legacy npm /avatar/{md5} path to a Gravatar URL", async () => {
+    const md5 = "00000000000000000000000000000000";
+    server.use(
+      reg.get("/-/npm/v1/user", () => HttpResponse.json({ ...BASE_PROFILE, email: null })),
+      reg.get("/-/user/gaubee", () => HttpResponse.json({ avatar: `/avatar/${md5}` })),
+      reg.get("/-/user/org.couchdb.user:gaubee", () => HttpResponse.json({})),
+    );
+    const r = await lookupAvatar("gaubee", makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.avatarUrl).toBe(`https://gravatar.com/avatar/${md5}?s=128&d=404`);
+      expect(r.data.source).toBe("registry-profile");
+    }
+  });
+
+  it("falls back to maintainer search → verified Gravatar (source: maintainer-gravatar)", async () => {
+    server.use(
+      reg.get("/-/npm/v1/user", () => HttpResponse.json({ ...BASE_PROFILE, email: null })),
+      reg.get("/-/user/gaubee", () => HttpResponse.json({})),
+      reg.get("/-/user/org.couchdb.user:gaubee", () => HttpResponse.json({})),
+      reg.get("/-/v1/search", () =>
+        HttpResponse.json({
+          objects: [
+            {
+              package: {
+                name: "some-pkg",
+                publisher: { username: "gaubee", email: "me@example.com" },
+              },
+            },
+          ],
+        }),
+      ),
+      gravatarHead(200),
+    );
+    const r = await lookupAvatar("gaubee", makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.avatarUrl).toBe(GRAVATAR_URL);
+      expect(r.data.source).toBe("maintainer-gravatar");
+    }
+  });
+
+  it("returns source 'none' (not an error) when every link misses", async () => {
+    server.use(
+      reg.get("/-/npm/v1/user", () => HttpResponse.json({ ...BASE_PROFILE, email: null })),
+      reg.get("/-/user/gaubee", () => HttpResponse.json({})),
+      reg.get("/-/user/org.couchdb.user:gaubee", () => HttpResponse.json({})),
+      reg.get("/-/v1/search", () => HttpResponse.json({ objects: [] })),
+    );
+    const r = await lookupAvatar("gaubee", makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.avatarUrl).toBeNull();
+      expect(r.data.source).toBe("none");
+    }
+  });
+
+  it("an anonymous client (null) skips the authenticated-profile link", async () => {
+    const order: string[] = [];
+    server.use(
+      // The profile endpoint must NOT be requested anonymously.
+      reg.get("/-/npm/v1/user", () => {
+        order.push("profile");
+        return HttpResponse.json(BASE_PROFILE);
+      }),
+      reg.get("/-/user/gaubee", () => HttpResponse.json({ avatar: "https://example.com/a.png" })),
+      gravatarHead(200),
+    );
+    const r = await lookupAvatar("gaubee", null);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.source).toBe("registry-profile");
+      expect(r.data.avatarUrl).toBe("https://example.com/a.png");
+    }
+    expect(order).toEqual([]);
+  });
+
+  it("trims and rejects an empty username as source 'none'", async () => {
+    const r = await lookupAvatar("   ", null);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.username).toBe("");
+      expect(r.data.avatarUrl).toBeNull();
+      expect(r.data.source).toBe("none");
+    }
+  });
+
+  it("ignores a maintainer whose username does not match", async () => {
+    server.use(
+      reg.get("/-/npm/v1/user", () => HttpResponse.json({ ...BASE_PROFILE, email: null })),
+      reg.get("/-/user/gaubee", () => HttpResponse.json({})),
+      reg.get("/-/user/org.couchdb.user:gaubee", () => HttpResponse.json({})),
+      reg.get("/-/v1/search", () =>
+        HttpResponse.json({
+          objects: [
+            {
+              package: {
+                name: "some-pkg",
+                // Different username — must not be used.
+                publisher: { username: "someone-else", email: "me@example.com" },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const r = await lookupAvatar("gaubee", makeClient());
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.source).toBe("none");
   });
 });
