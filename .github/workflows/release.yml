@@ -1,0 +1,74 @@
+# Publish safe-npm-sdk to the npm registry.
+#
+# Triggered by:
+#   - pushing a `v*` tag (the normal path — see `pnpm release`)
+#   - workflow_dispatch (manual override from the Actions tab)
+#
+# The npm publish token is read from the repository secret named `NPM_RELEASE`
+# and mapped to the env var `NODE_AUTH_TOKEN` that `npm publish` expects.
+#
+#   NOTE on the secret name: GitHub Actions secret names may only contain
+#   [a-z0-9_] — hyphens are rejected by the UI. So the requested `npm-release`
+#   becomes `NPM_RELEASE`. Create it under Settings → Secrets and variables →
+#   Actions → "New repository secret", name `NPM_RELEASE`, value = your npm
+#   automation/granular access token (publish scope).
+#
+# Provenance (SLSA build attestation) is enabled. One-time setup on the npm
+# side: the package owner's account must have "Publish packages with provenance"
+# enabled under account settings.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required by npm publish --provenance
+
+jobs:
+  publish:
+    name: build + publish
+    runs-on: ubuntu-latest
+    # Only act on tags that look like a release. `workflow_dispatch` carries
+    # no `github.ref` tag, so it always passes this filter.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: "24"
+          cache: true
+          # Writes ~/.npmrc so the `NODE_AUTH_TOKEN` env var below maps to the
+          # npm registry's `_authToken`. Without this, `npm publish` can't auth.
+          registry-url: "https://registry.npmjs.org"
+
+      - run: vp install
+      - run: vp check
+      - run: vp test
+      - run: vp run --filter safe-npm-sdk build
+
+      # Guard: the pushed tag must agree with packages/safe-npm-sdk/package.json.
+      # Skipped for workflow_dispatch (no tag to compare against).
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          pkg_version=$(node -p "require('./packages/safe-npm-sdk/package.json').version")
+          tag_version="${GITHUB_REF#refs/tags/v}"
+          echo "package.json version: $pkg_version"
+          echo "pushed tag version:    $tag_version"
+          if [ "$pkg_version" != "$tag_version" ]; then
+            echo "::error::tag '$tag_version' does not match package.json version '$pkg_version'"
+            exit 1
+          fi
+
+      - name: Publish to npm
+        working-directory: packages/safe-npm-sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_RELEASE }}
+        run: npm publish --provenance --access public

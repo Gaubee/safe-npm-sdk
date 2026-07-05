@@ -1,0 +1,35 @@
+# Continuous integration — runs on every push to main and every PR.
+# Validates (format + lint + typecheck + tests) but never publishes.
+# Publishing is handled by release.yml, triggered by a `v*` tag.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel in-flight runs when a newer commit supersedes them.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: check + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sets up Vite+ (`vp`), Node, pnpm (pinned via root `packageManager`),
+      # and dependency caching in a single step. See node_modules/vite-plus/docs/guide/ci.md.
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: "24"
+          cache: true
+
+      - run: vp install
+      - run: vp check
+      - run: vp test

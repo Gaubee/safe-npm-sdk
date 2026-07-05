@@ -14,7 +14,8 @@
     "check": "vp check",
     "fmt": "vp fmt",
     "lint": "vp lint",
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

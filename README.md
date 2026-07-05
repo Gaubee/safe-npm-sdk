@@ -76,6 +76,25 @@ vp run build          # pack the SDK (js + d.ts), vp run --filter safe-npm-sdk b
 vp run dev            # run the browser playground, vp dev packages/web-example
 ```
 
+## Releasing
+
+Releases are tag-driven. The `release` script bumps the version, refreshes the
+generated README, commits, and tags; pushing the tag triggers the
+[`release.yml`](./.github/workflows/release.yml) workflow, which validates,
+builds, and publishes to npm.
+
+```bash
+pnpm release             # interactive — choose patch / minor / major / x.y.z
+pnpm release -- minor    # non-interactive
+git push origin main && git push origin v0.4.0   # CI publishes
+```
+
+The workflow reads the npm publish token from a repository secret named
+**`NPM_RELEASE`** (GitHub rejects hyphens in secret names, so the requested
+`npm-release` is stored as `NPM_RELEASE`). Create it under
+Settings → Secrets and variables → Actions. Provenance is enabled — the npm
+account owning the package must allow "Publish packages with provenance" once.
+
 ## License
 
 MIT — same as the upstream npm registry API documentation.
