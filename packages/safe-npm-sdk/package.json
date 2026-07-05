@@ -13,6 +13,10 @@
     "zod"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gaubee/safe-npm-sdk.git"
+  },
   "files": [
     "dist",
     "README.md"
