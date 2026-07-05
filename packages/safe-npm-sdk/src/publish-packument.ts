@@ -105,8 +105,14 @@ export async function buildPublishPackument(
   // The version manifest = the full package.json, plus computed dist + _id.
   const versionManifest = { ...manifest, _id: versionId, dist };
 
+  // Top-level _id is the bare package name — NOT "name@version". The npm
+  // registry (CouchDB frontdoor) keys the packument document by the package
+  // name, so a top-level _id of "name@version" mismatches the existing doc
+  // and the registry rejects the PUT with "404 Failed to save packument".
+  // Mirrors libnpmpublish's buildMetadata: root._id = manifest.name, while
+  // only the per-version entry carries the "name@version" _id.
   return {
-    _id: versionId,
+    _id: name,
     name,
     ...(typeof manifest.description === "string" ? { description: manifest.description } : {}),
     "dist-tags": { [tag]: version },

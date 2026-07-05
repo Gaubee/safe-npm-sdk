@@ -10,7 +10,9 @@ describe("buildPublishPackument", () => {
     const p = await buildPublishPackument(manifest, TARBALL);
 
     expect(p.name).toBe("my-pkg");
-    expect(p._id).toBe("my-pkg@1.2.3");
+    // Top-level _id is the bare package name (matches the registry packument
+    // doc id), NOT "name@version" — see publish-packument.ts.
+    expect(p._id).toBe("my-pkg");
     expect(p["dist-tags"]).toEqual({ latest: "1.2.3" });
     expect(p.access).toBe("public");
     const v = p.versions?.["1.2.3"] as Record<string, unknown>;
