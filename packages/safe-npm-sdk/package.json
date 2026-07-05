@@ -1,6 +1,6 @@
 {
   "name": "safe-npm-sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Modern TypeScript SDK for the npm registry API — ESM + fetch + zod",
   "keywords": [
     "api",
